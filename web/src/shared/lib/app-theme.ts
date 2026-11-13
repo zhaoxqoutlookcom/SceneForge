@@ -3,9 +3,9 @@ import { theme as antdTheme } from "antd";
 
 import { isDarkResolvedTheme, type ResolvedTheme } from "@/shared/lib/theme-preference";
 
-const CSS_VAR_KEY_LIGHT = "novanova-studio-light";
-const CSS_VAR_KEY_DARK = "novanova-studio-dark";
-const CSS_VAR_KEY_PURPLE = "novanova-studio-purple";
+const CSS_VAR_KEY_LIGHT = "sceneforge-light";
+const CSS_VAR_KEY_DARK = "sceneforge-dark";
+const CSS_VAR_KEY_PURPLE = "sceneforge-purple";
 
 /** Logo 品牌色 */
 const BRAND = {

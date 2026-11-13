@@ -1,4 +1,4 @@
-# Novanova Studio UI 设计规范
+# SceneForge UI 设计规范
 
 > 状态：整体 UI 重构基线  
 > 参考范式：`docs/ai-agent-black-theme-preview.html`  
@@ -9,7 +9,7 @@
 
 ### 1.1 Design Read
 
-Novanova Studio 是面向视觉创作者的 AI Agent 创作工作台。整体设计采用冷静、精密、低干扰的专业工具语言，以 OLED 近黑、冷灰层级和单一黄绿色操作强调构成产品界面；现有紫粉 Logo 只承担品牌识别，不扩散为大面积界面渐变。
+SceneForge 是面向视觉创作者的 AI Agent 创作工作台。整体设计采用冷静、精密、低干扰的专业工具语言，以 OLED 近黑、冷灰层级和单一黄绿色操作强调构成产品界面；现有紫粉 Logo 只承担品牌识别，不扩散为大面积界面渐变。
 
 设计不是营销落地页，也不是传统管理后台。首页允许更强的品牌构图与作品展示，进入创作流程后，界面应逐步退后，把注意力让给输入、媒体结果和无限画布。
 
@@ -207,7 +207,7 @@ CSS / Tailwind / Ant Design / Canvas
 | 角色 | 字体 | 使用范围 |
 | --- | --- | --- |
 | 产品正文 | `SF Pro Text`, `PingFang SC`, `Microsoft YaHei`, system-ui | 导航、表单、表格、正文、弹窗 |
-| 英文品牌展示 | `Bricolage Grotesque` | 首页 `Novanova Studio` 字标和少量品牌标题 |
+| 英文品牌展示 | `Bricolage Grotesque` | 首页 `SceneForge` 字标和少量品牌标题 |
 | 艺术字形 | `Syne` | 仅首页或品牌预览中的大字号英文，不进入产品控件 |
 | 数字与时间 | 正文字体 + `font-variant-numeric: tabular-nums` | 积分、尺寸、时长、日期、任务编号 |
 
@@ -382,7 +382,7 @@ CSS / Tailwind / Ant Design / Canvas
 
 ### 10.1 首页
 
-- 第一屏直接呈现 Novanova Studio 品牌、Agent 入口和真实作品，不能是营销功能介绍页。
+- 第一屏直接呈现 SceneForge 品牌、Agent 入口和真实作品，不能是营销功能介绍页。
 - 桌面采用非对称双栏；移动端按品牌、输入、作品顺序单列。
 - 品牌字标最多占两行，支撑文案最多四行。
 - Agent 输入区是第一主操作，图片、视频、无限画布是第二层入口。
@@ -507,7 +507,7 @@ CSS / Tailwind / Ant Design / Canvas
 
 `getAntThemeConfig` 必须从语义 Token 构造：
 
-| Ant Design Token | Novanova Token |
+| Ant Design Token | SceneForge Token |
 | --- | --- |
 | `colorPrimary` | `studio.action` |
 | `colorPrimaryHover` | `studio.actionHover` |

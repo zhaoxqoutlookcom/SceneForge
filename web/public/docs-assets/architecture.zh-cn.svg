@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="900" height="590" viewBox="0 0 900 590" role="img" aria-labelledby="arch-title arch-desc" font-family="Helvetica,Arial,'PingFang SC','Microsoft YaHei',sans-serif">
-    <title id="arch-title">Novanova Studio 系统架构</title>
+    <title id="arch-title">SceneForge 系统架构</title>
     <desc id="arch-desc">浏览器工作台经 Nginx 接入，分别访问 Next.js 前端服务与 Spring Boot 服务端；服务端包含 API 与业务层、Agent 编排、任务与事件、渠道适配器，并访问 PostgreSQL、Redis、对象存储和 AI 模型渠道。</desc>
     <defs>
         <marker id="arch-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">

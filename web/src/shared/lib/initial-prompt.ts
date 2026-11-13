@@ -1,5 +1,5 @@
 import { teamStorageKey } from "@/features/team/stores/use-team-store";
-const PENDING_INITIAL_PROMPT_KEY = "novanova:pending-initial-prompt";
+const PENDING_INITIAL_PROMPT_KEY = "sceneforge:pending-initial-prompt";
 
 /**
  * 读取当前地址或一次性导航缓存中的初始提示词。

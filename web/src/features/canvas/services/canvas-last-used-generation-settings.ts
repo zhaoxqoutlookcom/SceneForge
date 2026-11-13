@@ -20,7 +20,7 @@ type CanvasLastUsedGenerationSettings = {
     };
 };
 
-const storageKey = "novanova-studio.canvas-generation-settings.v1";
+const storageKey = "sceneforge.canvas-generation-settings.v1";
 
 export function readCanvasLastUsedGenerationSettings(kind: CanvasNodeKind): CanvasNodeAttributes | undefined {
     const settings = readSettings();

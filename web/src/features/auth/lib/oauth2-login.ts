@@ -2,7 +2,7 @@
 import { translateMessage as translate } from "@/features/locale/translate";
 import { resolveAuthenticationRedirect } from "./authentication-path";
 import { parseSpacePath } from "@/features/team/space-path";
-const OAUTH2_REDIRECT_SESSION_KEY = "novanova:oauth2:redirect:v1";
+const OAUTH2_REDIRECT_SESSION_KEY = "sceneforge:oauth2:redirect:v1";
 
 const OAUTH2_ERROR_MESSAGES: Record<string, string> = {
     get accessDenied() { return translate("auth.thirdPartyAuthorizationCanceled"); },

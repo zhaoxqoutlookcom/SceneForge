@@ -7,7 +7,7 @@ import { batchGetServerListThumbnailAccess } from "@/services/api/server";
 export const IMAGE_LIST_THUMBNAIL_EDGE = 160;
 
 const thumbnailStore = localforage.createInstance({
-    name: "novanova-studio",
+    name: "sceneforge",
     storeName: "image_list_thumbnails",
 });
 

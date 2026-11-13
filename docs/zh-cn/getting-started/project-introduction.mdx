@@ -1,11 +1,11 @@
 ---
 title: 项目介绍
-description: 了解 Novanova Studio 的定位、核心能力和整体工作流。
+description: 了解 SceneForge 的定位、核心能力和整体工作流。
 ---
 
 # 项目介绍
 
-Novanova Studio 是一个由 AI Agent 驱动的视觉创作工作台，把图片、视频、无限画布、提示词和资产管理放在同一条创作链路中。
+SceneForge 是一个由 AI Agent 驱动的视觉创作工作台，把图片、视频、无限画布、提示词和资产管理放在同一条创作链路中。
 
 ## 核心能力
 
@@ -26,14 +26,14 @@ Novanova Studio 是一个由 AI Agent 驱动的视觉创作工作台，把图片
 
 系统自上而下分为五层：浏览器工作台、接入层、前端服务、后端服务、数据与外部依赖。浏览器只访问同源的 `/api/v1/**`，AI 渠道密钥与对象存储凭证都保存在服务端，不会下发到浏览器。
 
-![Novanova Studio 系统架构](/docs-assets/architecture.zh-cn.svg)
+![SceneForge 系统架构](/docs-assets/architecture.zh-cn.svg)
 
 | 层 | 组成 | 职责 |
 | --- | --- | --- |
 | 浏览器工作台 | Next.js 16 App Router、React 19、Ant Design 6、Tailwind、Zustand、React Flow | 图片、视频、无限画布、资产、提示词库与管理后台的交互界面 |
 | 接入层 | Nginx 1.27 | TLS 终止与反向代理：`/api/*` 转发到服务端并关闭缓冲以支持 SSE 实时推送，其余请求转发到前端 `:5550` |
 | 前端服务 | Next.js standalone（Node.js 22） | 页面渲染、`/docs` 文档门户与静态资源 |
-| 后端服务 | Java 21、Spring Boot 3.5、Spring WebFlux、AgentScope Java、Fastjson2、R2DBC | 响应式 API、Agent 编排与工具调用、AI 任务调度与轮询、鉴权、业务服务 |
+| 后端服务 | Java 25、Spring Boot 3.5、Spring WebFlux、AgentScope Java、Fastjson2、R2DBC | 响应式 API、Agent 编排与工具调用、AI 任务调度与轮询、鉴权、业务服务 |
 | 数据与外部依赖 | PostgreSQL 17 + Flyway、Redis 8.6 + Stream、对象存储（COS / OSS / Kodo）、模型渠道 | 用户与创作数据持久化、异步任务分发与恢复、素材与生成结果存储、模型推理调用 |
 
 ### 一次生成请求的链路

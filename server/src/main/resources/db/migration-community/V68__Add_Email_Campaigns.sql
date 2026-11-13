@@ -84,6 +84,6 @@ BEGIN
     FOREACH table_name IN ARRAY ARRAY['email_campaigns', 'email_campaign_images', 'email_deliveries', 'email_dispatch_control'] LOOP
         EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', table_name);
         EXECUTE format('ALTER TABLE %I FORCE ROW LEVEL SECURITY', table_name);
-        EXECUTE format('CREATE POLICY platform_email_access ON %I USING (current_setting(''novanova.team_id'', true) = ''0'') WITH CHECK (current_setting(''novanova.team_id'', true) = ''0'')', table_name);
+        EXECUTE format('CREATE POLICY platform_email_access ON %I USING (current_setting(''sceneforge.team_id'', true) = ''0'') WITH CHECK (current_setting(''sceneforge.team_id'', true) = ''0'')', table_name);
     END LOOP;
 END $$;

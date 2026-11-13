@@ -1,7 +1,7 @@
 /** 网站支持的语言，文档路径与偏好使用相同标识。 */
 export const websiteLocales = ["zh-cn", "en"] as const;
 export type WebsiteLocale = (typeof websiteLocales)[number];
-export const languageCookieName = "novanova_language";
+export const languageCookieName = "sceneforge_language";
 export const languageCookieMaxAge = 31_536_000;
 
 /** 校验显式语言标识。 */

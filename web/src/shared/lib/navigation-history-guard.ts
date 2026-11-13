@@ -34,7 +34,7 @@ function installNavigationHistory() {
     let confirming = false;
     const originalPush = window.history.pushState;
     const originalReplace = window.history.replaceState;
-    const stamp = (state: Record<string, unknown> | null) => ({ ...state, novanovaNavigation: { token, position } });
+    const stamp = (state: Record<string, unknown> | null) => ({ ...state, sceneforgeNavigation: { token, position } });
     const push: History["pushState"] = function (state, unused, url) {
         position += 1;
         originalPush.call(window.history, stamp(state), unused, url);
@@ -48,7 +48,7 @@ function installNavigationHistory() {
     window.history.pushState = push;
     window.history.replaceState = replace;
     const interceptHistory = (event: PopStateEvent) => {
-        const next = event.state?.novanovaNavigation;
+        const next = event.state?.sceneforgeNavigation;
         // 不属于本次运行的文档交给浏览器处理，其离开确认由 beforeunload 负责。
         if (next?.token !== token) return;
         if (restored && next.position === position) {

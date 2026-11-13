@@ -11,11 +11,11 @@ export type SpaceBrand = {
 
 /** 平台默认品牌，团队未配置 Logo 时使用相应的默认图标。PWA 安装入口固定使用该品牌名（与 manifest 一致）。 */
 export const platformBrand: SpaceBrand = {
-    name: "Novanova Studio",
-    logoUrl: "/logo/novanovastudio.svg",
-    iconUrl: "/logo/novanovastudio-108x108.png",
+    name: "SceneForge",
+    logoUrl: "/logo/sceneforge.svg",
+    iconUrl: "/logo/sceneforge-108x108.png",
     introduction: "",
-    agentName: "Novanova Agent",
+    agentName: "SceneForge Agent",
     isTeam: false,
 };
 

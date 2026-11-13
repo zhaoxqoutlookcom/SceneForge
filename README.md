@@ -1,36 +1,37 @@
 <p align="right"><b>简体中文</b> · <a href="README.en.md">English</a></p>
 
 <p align="center">
-  <img src="logo/novanovastudio.png" width="128" alt="Novanova Studio logo">
+  <img src="logo/sceneforge.png" width="128" alt="SceneForge logo">
 </p>
 
-<h1 align="center">Novanova Studio</h1>
+<h1 align="center">SceneForge</h1>
+<p align="center"><b>幕工厂</b></p>
 
 <p align="center">
-  NovaNova Studio 一个 Agent 驱动的集 AI图片生成、AI视频生成、无限画布、自定义模型 API 、AI漫剧、AI短剧、小说解析剧本、小说转短剧、3D导演台、用户管理、积分管理于一体的全流程开源平台
-</p>
-
-<p align="center">
-  <a href="https://www.novanovastudio.cn/">>>>>如果觉得部署麻烦、找便宜渠道麻烦->点我在线体验 <<<<<</a> <br>
-  <a href="https://www.novanovastudio.cn/">🚀seedance2.0系列最低4折官转API🚀</a><br>
-  <a href="https://www.novanovastudio.cn/">🚀minmax-h3 高清 最低6分钱一秒🚀</a><br>
-  <a href="https://www.novanovastudio.cn/">🚀gpt-image-2.5 最低一毛五一张🚀</a>
+  SceneForge（幕工厂）是一个 Agent 驱动的集 AI图片生成、AI视频生成、无限画布、自定义模型 API 、AI漫剧、AI短剧、小说解析剧本、小说转短剧、3D导演台、用户管理、积分管理于一体的全流程开源平台
 </p>
 
 <p align="center">
-  <img src="github_images/homepage2-compressed.webp" alt="Novanova Studio 首页截图">
+  <a href="https://www.sceneforge.cn/">>>>>如果觉得部署麻烦、找便宜渠道麻烦->点我在线体验 <<<<<</a> <br>
+  <a href="https://www.sceneforge.cn/">🚀seedance2.0系列最低4折官转API🚀</a><br>
+  <a href="https://www.sceneforge.cn/">🚀minmax-h3 高清 最低6分钱一秒🚀</a><br>
+  <a href="https://www.sceneforge.cn/">🚀gpt-image-2.5 最低一毛五一张🚀</a>
+</p>
+
+<p align="center">
+  <img src="github_images/homepage2-compressed.webp" alt="SceneForge 首页截图">
 </p>
 <p align="center">
-  <img src="github_images/nova-s2.png" alt="Novanova Studio 画布截图">
+  <img src="github_images/nova-s2.png" alt="SceneForge 画布截图">
 </p>
 <p align="center">
-  <img src="github_images/fgk.png" alt="Novanova Studio 画布截图">
+  <img src="github_images/fgk.png" alt="SceneForge 画布截图">
 </p>
 <p align="center">
-  <img src="github_images/jbcz.png" alt="Novanova Studio 剧本创作">
+  <img src="github_images/jbcz.png" alt="SceneForge 剧本创作">
 </p>
 <p align="center">
-  <img src="github_images/mjcz.png" alt="Novanova Studio 漫剧创作">
+  <img src="github_images/mjcz.png" alt="SceneForge 漫剧创作">
 </p>
 
 
@@ -90,12 +91,12 @@
 
 ## 🚀 在线文档
 
-[文档](https://www.novanovastudio.cn/docs/zh-cn)
+[文档](https://www.sceneforge.cn/docs/zh-cn)
 
 
 ## ✨ 项目定位
 
-Novanova Studio 是面向独立创作者与视觉团队的 AI 创作工作台。它不是把图片、视频、提示词和生成记录拆散在多个工具中的集合，而是以**无限画布**作为创作上下文，以 **AI Agent** 作为理解意图、选择工具和推进任务的中枢。
+SceneForge 是面向独立创作者与视觉团队的 AI 创作工作台。它不是把图片、视频、提示词和生成记录拆散在多个工具中的集合，而是以**无限画布**作为创作上下文，以 **AI Agent** 作为理解意图、选择工具和推进任务的中枢。
 
 创作者可以从一句自然语言目标或一组参考素材开始，在图片、视频和画布场景中持续对话、生成、编辑、比较与复用结果；生成记录、资产、提示词和画布节点会保留在同一条创作链路中。
 
@@ -197,7 +198,7 @@ Agent 不只是一次性调用模型，而是贯穿需求理解、工具选择�
 | 层级 | 主要技术 | 作用 |
 | --- | --- | --- |
 | Web | Next.js 16、React 19、TypeScript、Ant Design 6、Tailwind CSS、Zustand、React Flow | 创作工作台、对话、画布与配置界面。 |
-| 服务端 | Java 21、Spring Boot 3.5、Spring WebFlux、AgentScope Java、Fastjson2 | 响应式 API、Agent 编排、任务调度、鉴权与业务服务。 |
+| 服务端 | Java 25、Spring Boot 3.5、Spring WebFlux、AgentScope Java、Fastjson2 | 响应式 API、Agent 编排、任务调度、鉴权与业务服务。 |
 | 数据与任务 | PostgreSQL 17、Flyway、R2DBC（响应式数据库连接）、Redis 8.6、Redis Stream | 用户、项目、任务、资产和生成记录持久化；异步任务分发与恢复。 |
 | AI 与存储 | OpenAI、Evolink、Gemini、Agnes、Anthropic、Seedance、MiniMax 格式渠道；COS、OSS、Kodo、R2 | 通过后台配置接入模型渠道和对象存储，而非把密钥放入浏览器。 |
 | 部署 | Docker Compose、Nginx、Node.js 22、Maven | 本地依赖服务、容器化构建与 Linux 服务器部署。 |
@@ -233,7 +234,7 @@ Docker 部署会由 Flyway 自动执行数据库迁移。新建开源库默认�
 
 ## 📚 相关文档
 
-- [Novanova Studio 文档门户](/docs)
+- [SceneForge 文档门户](/docs)
 - [工程与 API 文档](docs-api/)
 - [产品定位](PRODUCT.md)
 - [开源许可证](LICENSE)

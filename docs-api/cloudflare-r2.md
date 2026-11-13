@@ -14,7 +14,7 @@ R2 适配器通过 S3 兼容 API 保存公开素材与生成结果，同时支�
 | 字段 | 示例或说明 |
 | --- | --- |
 | 配置名称 | `R2 media` |
-| 存储目录 | `novanova-studio`，作为对象键前缀 |
+| 存储目录 | `sceneforge`，作为对象键前缀 |
 | Access Key ID | R2 提供的 S3 访问密钥 ID |
 | Secret Access Key | 与该 ID 配对的 S3 机密访问密钥 |
 | Bucket | `example-bucket`，仅填桶名称 |

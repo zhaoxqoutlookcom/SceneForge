@@ -1,11 +1,11 @@
 ---
 title: Project introduction
-description: Understand Novanova Studio's purpose, capabilities, and creative workflow.
+description: Understand SceneForge's purpose, capabilities, and creative workflow.
 ---
 
 # Project introduction
 
-Novanova Studio is an AI Agent-powered visual creation workspace. Images, videos, the infinite canvas, prompts, and assets stay connected in one creative workflow.
+SceneForge is an AI Agent-powered visual creation workspace. Images, videos, the infinite canvas, prompts, and assets stay connected in one creative workflow.
 
 ## Core capabilities
 
@@ -26,14 +26,14 @@ Novanova Studio is an AI Agent-powered visual creation workspace. Images, videos
 
 The system is arranged in five layers: the browser workspace, the edge layer, the front-end service, the back-end service, and data plus external dependencies. The browser only calls same-origin `/api/v1/**`; AI channel keys and object storage credentials stay on the server and are never shipped to the browser.
 
-![Novanova Studio system architecture](/docs-assets/architecture.en.svg)
+![SceneForge system architecture](/docs-assets/architecture.en.svg)
 
 | Layer | Stack | Responsibility |
 | --- | --- | --- |
 | Browser workspace | Next.js 16 App Router, React 19, Ant Design 6, Tailwind, Zustand, React Flow | The UI for image, video, the infinite canvas, assets, the prompt library, and the admin console |
 | Edge | Nginx 1.27 | TLS termination and reverse proxy: `/api/*` goes to the back end with buffering off so SSE can stream, everything else goes to the front end on `:5550` |
 | Front-end service | Next.js standalone (Node.js 22) | Page rendering, the `/docs` portal, and static assets |
-| Back-end service | Java 21, Spring Boot 3.5, Spring WebFlux, AgentScope Java, Fastjson2, R2DBC | Reactive APIs, Agent orchestration and tool calls, AI task scheduling and polling, auth, and business services |
+| Back-end service | Java 25, Spring Boot 3.5, Spring WebFlux, AgentScope Java, Fastjson2, R2DBC | Reactive APIs, Agent orchestration and tool calls, AI task scheduling and polling, auth, and business services |
 | Data and external dependencies | PostgreSQL 17 + Flyway, Redis 8.6 + Stream, object storage (COS / OSS / Kodo), model providers | Persisting users and creations, async task dispatch and recovery, media storage, and model inference calls |
 
 ### The path of a generation request

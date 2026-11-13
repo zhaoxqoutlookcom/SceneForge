@@ -21,7 +21,7 @@ export type RecentReferenceAsset = {
 export type RecentReferenceAssetInput = Omit<RecentReferenceAsset, "url"> & { url?: string };
 
 const recentReferenceAssetStorage = localforage.createInstance({
-    name: "novanova-studio",
+    name: "sceneforge",
     // 沿用图片时期的桶名，已存的最近上传记录不必迁移。
     storeName: "recent_reference_images",
 });

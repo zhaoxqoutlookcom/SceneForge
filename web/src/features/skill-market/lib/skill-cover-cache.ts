@@ -1,7 +1,7 @@
 import localforage from "localforage";
 
 const coverStore = localforage.createInstance({
-    name: "novanova-studio",
+    name: "sceneforge",
     storeName: "skill_covers",
 });
 

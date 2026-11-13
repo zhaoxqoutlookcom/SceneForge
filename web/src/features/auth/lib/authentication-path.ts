@@ -4,11 +4,11 @@ import { isAuthenticationPath, parseSpacePath, pathInSpace } from "@/features/te
 export function resolveAuthenticationRedirect(value: string | null | undefined, teamSlug: string | null) {
     if (!value) return pathInSpace("/", teamSlug);
     if (!value.startsWith("/") || value.startsWith("//") || /[\\\u0000-\u001f\u007f]/.test(value)) throw new Error("登录跳转地址无效");
-    const url = new URL(value, "https://novanova.invalid");
+    const url = new URL(value, "https://sceneforge.invalid");
     let decodedPathname: string;
     try { decodedPathname = decodeURIComponent(url.pathname); }
     catch { throw new Error("登录跳转地址无效"); }
-    if (url.origin !== "https://novanova.invalid" || /%2f|%5c/i.test(url.pathname) || /[\\\u0000-\u001f\u007f]/.test(decodedPathname) || decodedPathname.includes("//")) throw new Error("登录跳转地址无效");
+    if (url.origin !== "https://sceneforge.invalid" || /%2f|%5c/i.test(url.pathname) || /[\\\u0000-\u001f\u007f]/.test(decodedPathname) || decodedPathname.includes("//")) throw new Error("登录跳转地址无效");
     if (isAuthenticationPath(decodedPathname)) throw new Error("登录后不能跳转到认证页面");
     if (/^\/oauth(?:\/|$)/.test(decodedPathname)) return `${url.pathname}${url.search}${url.hash}`;
     const target = parseSpacePath(decodedPathname);

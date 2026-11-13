@@ -10,7 +10,7 @@
 export const PWA_BASE_PATH = "/";
 
 /** Service Worker 脚本路径（相对 origin） */
-export const PWA_SW_PATH = "/novanova-sw.js";
+export const PWA_SW_PATH = "/sceneforge-sw.js";
 
 /** SW 注册 scope（须与 manifest 的 scope 一致） */
 export const PWA_SCOPE = "/";

@@ -15,7 +15,7 @@ OAuth2 第三方登录（Google、linux.do）的启用状态与凭据从 `.env` 
 
 首次部署写入 `google`、`linuxDo` 两行空配置。密钥使用 `SensitiveDataCrypto`（`APP_SECRET_KEY`）加密，管理接口只对管理员返回明文用于回填；保存时密钥留空表示清空已保存的密钥。保存成功后立即刷新内存缓存，登录流程按 `registrationId` 实时构建 Spring Security 客户端注册信息，不需要重启服务。
 
-管理接口为 `/api/v1/config/oauth/listOAuthProviders`、`updateOAuthProvider`；登录入口仍为 `/api/v1/auth/oauth/listProviders`、`/api/v1/auth/oauth/authorize/{registrationId}`。原 `.env` 的 `OAUTH2_*`、`application.yml` 的 `oauth2` 与 `NovanovaProperties.OAuth2` 已删除。
+管理接口为 `/api/v1/config/oauth/listOAuthProviders`、`updateOAuthProvider`；登录入口仍为 `/api/v1/auth/oauth/listProviders`、`/api/v1/auth/oauth/authorize/{registrationId}`。原 `.env` 的 `OAUTH2_*`、`application.yml` 的 `oauth2` 与 `SceneForgeProperties.OAuth2` 已删除。
 
 ## 平台标准 OAuth2 自定义登录渠道（企业版 V84 / 社区版 V85）
 
@@ -973,7 +973,7 @@ V51 新增逐集正文批量生成，复用全书改编的任务、工作流快�
 
 画布、资产、媒体、生成记录、剧本及子表、小说改编、Agent会话、计划、队列请求、后台任务及用户业务配置增加 `team_id`。数据库启用并强制执行行级安全策略（Row Level Security，RLS），关联触发器检查跨空间外键引用；创作数据仍由既有用户归属校验保持成员私有。平台授权资源只读开放，继承内容只从一个明确空间读取，独立空内容保持为空。
 
-R2DBC连接在每次借出时切换至无登录、无RLS绕过权限的 `novanova_pro_runtime` 角色，并覆盖团队、钱包、系统扫描和管理员筛选参数。迁移账户需要创建及授予此角色的权限。后台扫描可以跨团队读取，执行前从任务记录恢复用户与空间并撤销扫描权限。AI及视频合成任务保存创建时的OSS标识，AI任务额外记录模型提供方；修改默认配置不改变原任务归属。
+R2DBC连接在每次借出时切换至无登录、无RLS绕过权限的 `sceneforge_pro_runtime` 角色，并覆盖团队、钱包、系统扫描和管理员筛选参数。迁移账户需要创建及授予此角色的权限。后台扫描可以跨团队读取，执行前从任务记录恢复用户与空间并撤销扫描权限。AI及视频合成任务保存创建时的OSS标识，AI任务额外记录模型提供方；修改默认配置不改变原任务归属。
 
 存储费用以十亿字节为1GB，上海时区自然月实际秒数折算，扣除团队禁用时间后按用户、空间和收费方汇总，四舍五入为6位小数。V60起停止产生及补出新月费账单，仅保留已有账单支付。余额不足时整单保留欠费及余额，补款后定时按旧账单优先重试；欠费空间禁止新增上传和产生文件的任务。对象删除失败保留台账及错误，确认成功后停止计量。文件公开链接保持原行为。
 

@@ -6,7 +6,7 @@ import { getImageBlob, setImageBlob } from "@/features/storage/services/image-st
 import type { Asset } from "@/features/assets/stores/use-asset-store";
 
 /** 素材导出归档的应用标识。 */
-const EXPORT_APP_ID = "novanova-studio";
+const EXPORT_APP_ID = "sceneforge";
 /** 素材导出归档格式版本。 */
 const EXPORT_VERSION = 1;
 /** 图片存储 key 前缀。 */

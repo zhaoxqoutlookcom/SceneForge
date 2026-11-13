@@ -3,7 +3,7 @@ import { translateMessage as translate } from "@/features/locale/translate";
 import { listHomepageShowcases, type HomepageShowcase } from "@/services/api/server";
 
 export const homepageFallbackEditorialShowcaseId = -1;
-export const homepageFallbackEditorialVideoUrls = ["/homepage/novanova-black-editorial.mp4", "/homepage/novanova-black-editorial-2.mp4"] as const;
+export const homepageFallbackEditorialVideoUrls = ["/homepage/sceneforge-black-editorial.mp4", "/homepage/sceneforge-black-editorial-2.mp4"] as const;
 
 export const homepageFallbackShowcases: HomepageShowcase[] = [
     {
@@ -28,7 +28,7 @@ export const homepageFallbackShowcases: HomepageShowcase[] = [
         category: "时尚影像",
         creatorName: "林夏",
         mediaType: "image",
-        mediaUrl: "/homepage/novanova-black-fashion.jpg",
+        mediaUrl: "/homepage/sceneforge-black-fashion.jpg",
         thumbnailUrl: "",
         targetType: "video",
         targetPath: "/video",
@@ -43,7 +43,7 @@ export const homepageFallbackShowcases: HomepageShowcase[] = [
         category: "产品视觉",
         creatorName: "Northline",
         mediaType: "image",
-        mediaUrl: "/homepage/novanova-black-product.jpg",
+        mediaUrl: "/homepage/sceneforge-black-product.jpg",
         thumbnailUrl: "",
         targetType: "image",
         targetPath: "/image",

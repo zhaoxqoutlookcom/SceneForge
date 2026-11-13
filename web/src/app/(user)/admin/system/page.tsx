@@ -2577,7 +2577,7 @@ function HomepageShowcaseManagement() {
     const openCreate = () => {
         setEditing(null);
         form.resetFields();
-        form.setFieldsValue({ category: "视觉海报", creatorName: "Novanova Studio", mediaType: "image", targetType: "image", status: 1, sortOrder: 1000 });
+        form.setFieldsValue({ category: "视觉海报", creatorName: "SceneForge", mediaType: "image", targetType: "image", status: 1, sortOrder: 1000 });
         setOpen(true);
     };
 
@@ -2718,7 +2718,7 @@ function HomepageShowcaseManagement() {
                             <Input placeholder={translate("administration.eGVisualPoster")} maxLength={50} />
                         </Form.Item>
                         <Form.Item name="creatorName" label={translate("administration.creator")} rules={[{ required: true, message: translate("administration.enterCreatorName") }]}>
-                            <Input placeholder={translate("administration.eGNovanovaStudio")} maxLength={100} />
+                            <Input placeholder={translate("administration.eGSceneForgeStudio")} maxLength={100} />
                         </Form.Item>
                     </div>
                     <div className="grid gap-4 sm:grid-cols-2">

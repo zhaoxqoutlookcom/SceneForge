@@ -10,5 +10,5 @@ export function createMediaDownloadFileName(kind: DownloadableMediaKind, extensi
         date.getSeconds().toString().padStart(2, "0"),
     ].join("");
     const suffix = extension ? `.${extension.replace(/^\./, "")}` : "";
-    return `novanovastudio-${kind}-${timestamp}${suffix}`;
+    return `sceneforge-${kind}-${timestamp}${suffix}`;
 }

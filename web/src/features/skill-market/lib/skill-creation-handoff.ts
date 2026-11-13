@@ -13,7 +13,7 @@ export type SkillCreationHandoff = {
     skill: SkillOption;
 };
 
-const STORAGE_KEY = "novanova:skill-market-handoff";
+const STORAGE_KEY = "sceneforge:skill-market-handoff";
 
 function readStorage(): Storage | null {
     try {

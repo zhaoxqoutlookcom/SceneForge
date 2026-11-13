@@ -4,7 +4,7 @@ export type CreationMode = "agent" | "chat";
 /** 模式记忆维度：图片页与视频页各自独立。 */
 export type CreationModeTarget = "image" | "video";
 
-const STORAGE_KEY_PREFIX = "novanova:creation-mode:";
+const STORAGE_KEY_PREFIX = "sceneforge:creation-mode:";
 
 /**
  * 归一化本地存储读取结果，未知值一律回落到 agent。

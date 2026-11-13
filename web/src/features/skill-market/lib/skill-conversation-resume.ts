@@ -8,7 +8,7 @@ export type ResumedSkillConversation = {
     skill: SkillOption;
 };
 
-const STORAGE_KEY_PREFIX = "novanova:skill-conversation:";
+const STORAGE_KEY_PREFIX = "sceneforge:skill-conversation:";
 
 function storageKey(target: SkillConversationTarget) {
     return `${STORAGE_KEY_PREFIX}${target}`;

@@ -1,4 +1,4 @@
-FROM maven:3.9.11-eclipse-temurin-21 AS builder
+FROM maven:3.9.16-eclipse-temurin-25 AS builder
 
 WORKDIR /app
 COPY maven-settings.xml /opt/maven/settings.xml
@@ -6,9 +6,9 @@ COPY pom.xml .
 COPY .mvn ./.mvn
 COPY src ./src
 # 直接打包并复用依赖缓存，避免预下载未使用的插件；并发构建时锁定仓库缓存。
-RUN --mount=type=cache,id=novanova-studio-maven,target=/app/.maven-repository,sharing=locked mvn -B -ntp -s /opt/maven/settings.xml -DskipTests package
+RUN --mount=type=cache,id=sceneforge-maven,target=/app/.maven-repository,sharing=locked mvn -B -ntp -s /opt/maven/settings.xml -DskipTests package
 
-FROM eclipse-temurin:21-jre
+FROM eclipse-temurin:25-jre
 
 # 默认使用中国标准时间，Compose 可通过 TZ 环境变量覆盖。
 ENV TZ=Asia/Shanghai

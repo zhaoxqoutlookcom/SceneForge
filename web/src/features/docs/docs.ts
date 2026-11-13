@@ -26,7 +26,7 @@ export type DocGroup = {
 
 const groupDefinitions = [
     { key: "getting-started", titles: { "zh-cn": "快速开始", en: "Getting started" }, order: ["project-introduction", "docker-start", "local-development"] },
-    { key: "using-studio", titles: { "zh-cn": "使用本项目", en: "Using Novanova Studio" }, order: ["workspace", "image-generation", "video-generation", "canvas", "script-creation", "comic-drama", "assets", "prompt-library", "admin", "system-configuration", "theme", "announcements", "profile"] },
+    { key: "using-studio", titles: { "zh-cn": "使用本项目", en: "Using SceneForge" }, order: ["workspace", "image-generation", "video-generation", "canvas", "script-creation", "comic-drama", "assets", "prompt-library", "admin", "system-configuration", "theme", "announcements", "profile"] },
     { key: "troubleshooting", titles: { "zh-cn": "问题与解决", en: "Troubleshooting" }, order: ["faq"] },
 ] as const;
 
@@ -82,7 +82,7 @@ function readDocPage(locale: Locale, filePath: string): DocPage {
     const { data, content } = parseFrontmatter(source);
     const relative = path.relative(path.join(docsRoot, locale), filePath).replace(/\\/g, "/").replace(/\.(mdx|md)$/, "");
     const slug = relative === "index" ? [] : relative.split("/");
-    return { locale, slug, title: String(data.title || slug.at(-1) || "Novanova Studio"), description: String(data.description || ""), content, isNew: data.new === true || data.new === "true" };
+    return { locale, slug, title: String(data.title || slug.at(-1) || "SceneForge"), description: String(data.description || ""), content, isNew: data.new === true || data.new === "true" };
 }
 
 function parseFrontmatter(source: string): { data: Record<string, unknown>; content: string } {

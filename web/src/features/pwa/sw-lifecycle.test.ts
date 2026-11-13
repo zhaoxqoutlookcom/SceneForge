@@ -10,7 +10,7 @@ import {
 } from "./sw-lifecycle.ts";
 import { usePwaStore } from "./use-pwa-store.ts";
 
-const SW_PATH = "/novanova-sw.js";
+const SW_PATH = "/sceneforge-sw.js";
 const SCOPE = "/";
 const ORIGIN = "https://app.example.com";
 

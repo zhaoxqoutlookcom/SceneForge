@@ -26,7 +26,7 @@ type RegisterForm = {
 };
 
 const EMAIL_CODE_COOLDOWN_SECONDS = 60;
-const EMAIL_CODE_COOLDOWN_STORAGE_KEY = "novanova:auth:email_code_cooldown_until";
+const EMAIL_CODE_COOLDOWN_STORAGE_KEY = "sceneforge:auth:email_code_cooldown_until";
 
 type AuthFormProps = {
     /** 登录或注册成功后的回调 */

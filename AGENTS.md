@@ -25,8 +25,8 @@
 
 ## 服务端规范
 
-- 服务端使用 Java、JDK 21、Spring Boot 3.5、AgentScope Java、Redis、PostgreSQL。
-- 服务端目录为 `server/`，基础包名为 `com.novanovastudio`。
+- 服务端使用 Java、JDK 25、Spring Boot 3.5、AgentScope Java、Redis、PostgreSQL。
+- 服务端目录为 `server/`，基础包名为 `com.sceneforge`。
 - `controller/` 只处理 HTTP 入参、调用 service、返回 `ApiResponse`。
 - `service/` 放业务逻辑、默认值、校验、时间、ID、鉴权、任务编排等处理。
 - `repository/` 只做数据库访问，优先使用 Spring R2DBC `DatabaseClient` 和显式 SQL，不使用 JPA 自动建表。
@@ -101,9 +101,9 @@
 
 
 # 本地构建和测试
-- powershell: `$env:JAVA_HOME="$env:USERPROFILE\.jabba\jdk\openjdk@21.0.2"; $env:PATH="$env:JAVA_HOME\bin;$env:PATH"; mvn compile -q`
+- powershell: `$env:JAVA_HOME="$env:USERPROFILE\.jabba\jdk\openjdk@25.0.4"; $env:PATH="$env:JAVA_HOME\bin;$env:PATH"; mvn compile -q`
 - Windows 测试出现 `Unable to establish loopback connection` 或 `UnixDomainSockets.connect` 的 `Invalid argument` 时，先在本项目 `server/target/` 下创建短路径套接字目录，再通过 Maven `-DargLine=-Djdk.net.unixdomain.tmpdir=该目录绝对路径` 仅为测试 JVM 指定目录；不要直接跳过网络测试，也不要修改全局 JDK 配置。
 - 运行 `mvn springboot:run`
 - 注意，如果只是测试的话，运行完成之后需要关掉启动的服务
-- 本地测试账号密码是 admin@admin.com / novanovastudio@pwss
+- 本地测试账号密码是 admin@admin.com / sceneforge@pwss
 - 优先使用ego-lite浏览器进行测试，本地找不到时使用内置浏览器

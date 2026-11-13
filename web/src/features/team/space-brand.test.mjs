@@ -4,7 +4,7 @@ import { test } from "node:test";
 import { resolveSpaceBrand, synchronizeDocumentBrand } from "./space-brand.ts";
 
 const team = { id: 101, teamSlug: "team1", name: "My 创作团队", logoUrl: "https://example.com/team-logo.svg", introduction: "团队介绍", enabled: true };
-const platformMetadata = { description: "平台介绍", editionsTitle: "Novanova Studio 版本对比", editionsDescription: "产品版本说明" };
+const platformMetadata = { description: "平台介绍", editionsTitle: "SceneForge 版本对比", editionsDescription: "产品版本说明" };
 
 test("团队品牌保留名称与大小写，只有未配置 Logo 时才使用平台图标", () => {
     const brand = resolveSpaceBrand(team);
@@ -20,8 +20,8 @@ test("团队品牌保留名称与大小写，只有未配置 Logo 时才使用�
     assert.equal(withoutLogo.iconUrl, platform.iconUrl);
     assert.equal(withoutLogo.name, team.name);
     assert.equal(withoutLogo.isTeam, true);
-    assert.equal(platform.name, "Novanova Studio");
-    assert.equal(platform.agentName, "Novanova Agent");
+    assert.equal(platform.name, "SceneForge");
+    assert.equal(platform.agentName, "SceneForge Agent");
     assert.equal(platform.isTeam, false);
     assert.equal(existsSync(new URL(`../../../public${platform.logoUrl}`, import.meta.url)), true);
     assert.equal(existsSync(new URL(`../../../public${platform.iconUrl}`, import.meta.url)), true);

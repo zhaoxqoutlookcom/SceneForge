@@ -1,5 +1,5 @@
 # ============================================================
-# Novanova Studio 服务端应用配置文件
+# SceneForge 服务端应用配置文件
 # 包含服务端口、数据库、Redis、AI 任务消费等全部配置项。邮件服务器在管理后台配置。
 # 敏感信息通过环境变量注入，默认值仅用于本地开发
 # ============================================================
@@ -19,7 +19,7 @@ server:
 spring:
   application:
     # 应用名称，用于服务注册、日志标识等
-    name: novanova-studio-server
+    name: sceneforge-server
   config:
     import:
       # 从上级目录加载 .env 环境变量文件（可选）
@@ -38,7 +38,7 @@ spring:
   # ----------------------------------------------------------
   datasource:
     # PostgreSQL JDBC 连接地址
-    url: jdbc:postgresql://${POSTGRES_HOST:127.0.0.1}:${POSTGRES_PORT:5432}/${POSTGRES_DATABASE:novanova_studio}
+    url: jdbc:postgresql://${POSTGRES_HOST:127.0.0.1}:${POSTGRES_PORT:5432}/${POSTGRES_DATABASE:scene_forge}
     # 数据库用户名
     username: ${POSTGRES_USERNAME:postgres}
     # 数据库密码
@@ -54,7 +54,7 @@ spring:
   # ----------------------------------------------------------
   r2dbc:
     # PostgreSQL R2DBC 连接地址
-    url: r2dbc:postgresql://${POSTGRES_HOST:127.0.0.1}:${POSTGRES_PORT:5432}/${POSTGRES_DATABASE:novanova_studio}
+    url: r2dbc:postgresql://${POSTGRES_HOST:127.0.0.1}:${POSTGRES_PORT:5432}/${POSTGRES_DATABASE:scene_forge}
     # 数据库用户名
     username: ${POSTGRES_USERNAME:postgres}
     # 数据库密码
@@ -88,7 +88,7 @@ spring:
     # 是否启用 Flyway 迁移
     enabled: true
     # 迁移使用的数据库连接地址
-    url: jdbc:postgresql://${POSTGRES_HOST:127.0.0.1}:${POSTGRES_PORT:5432}/${POSTGRES_DATABASE:novanova_studio}
+    url: jdbc:postgresql://${POSTGRES_HOST:127.0.0.1}:${POSTGRES_PORT:5432}/${POSTGRES_DATABASE:scene_forge}
     # 迁移使用的数据库用户名
     user: ${POSTGRES_USERNAME:postgres}
     # 迁移使用的数据库密码
@@ -149,7 +149,7 @@ springdoc:
 # ============================================================
 # 项目自定义业务配置
 # ============================================================
-novanova:
+sceneforge:
   database:
     # 自动创建目标数据库前连接的PostgreSQL管理数据库
     administrator-database: ${POSTGRES_ADMINISTRATOR_DATABASE:postgres}
@@ -164,12 +164,12 @@ novanova:
     trusted-proxy-addresses: ${TRUSTED_PROXY_ADDRESSES:}
   cors:
     # 允许跨域请求的来源地址模式（逗号分隔）
-    allowed-origin-patterns: ${CORS_ALLOWED_ORIGIN_PATTERNS:http://localhost:5555,http://127.0.0.1:5555,https://www.novanovastudio.cn}
+    allowed-origin-patterns: ${CORS_ALLOWED_ORIGIN_PATTERNS:http://localhost:5555,http://127.0.0.1:5555,https://www.sceneforge.cn}
   admin:
     # 初始管理员邮箱，首次启动时自动创建
     initial-email: ${ADMIN_INITIAL_EMAIL:admin@admin.com}
     # 初始管理员密码
-    initial-password: ${ADMIN_INITIAL_PASSWORD:novanovastudio@pwss}
+    initial-password: ${ADMIN_INITIAL_PASSWORD:sceneforge@pwss}
     # 初始管理员昵称
     initial-nickname: ${ADMIN_INITIAL_NICKNAME:admin}
   email-campaign:
@@ -263,9 +263,9 @@ novanova:
     # ----------------------------------------------------------
     task:
       # Redis Stream 键名，所有任务消息写入此 Stream
-      stream-key: ${AI_TASK_STREAM_KEY:novanova:ai-task:stream}
+      stream-key: ${AI_TASK_STREAM_KEY:sceneforge:ai-task:stream}
       # Redis Consumer Group 名称，所有实例的消费者加入同一组
-      consumer-group: ${AI_TASK_CONSUMER_GROUP:novanova-ai-task-consumer}
+      consumer-group: ${AI_TASK_CONSUMER_GROUP:sceneforge-ai-task-consumer}
       # 单实例内最大并发执行任务数，通过 Semaphore 控制；多实例各自独立计数
       consumer-concurrency: ${AI_TASK_CONSUMER_CONCURRENCY:4}
       # XREADGROUP / XPENDING 单次调用最多返回的消息条数

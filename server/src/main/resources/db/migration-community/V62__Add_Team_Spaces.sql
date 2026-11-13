@@ -22,7 +22,7 @@ COMMENT ON COLUMN teams.member_limit IS '子账号数量上限，不包含主管
 COMMENT ON COLUMN teams.enabled IS '是否启用团队';
 COMMENT ON COLUMN teams.created_at IS '创建时间';
 COMMENT ON COLUMN teams.updated_at IS '最后更新时间';
-INSERT INTO teams(id, team_slug, name, member_limit) VALUES (0, 'platform', 'Novanova Studio', 0);
+INSERT INTO teams(id, team_slug, name, member_limit) VALUES (0, 'platform', 'SceneForge', 0);
 
 CREATE TABLE team_members (
     team_id BIGINT NOT NULL REFERENCES teams(id),
@@ -121,15 +121,15 @@ COMMENT ON COLUMN team_disabled_periods.restored_at IS '恢复时间，空表示
 CREATE UNIQUE INDEX uk_team_open_disabled_period ON team_disabled_periods(team_id) WHERE restored_at IS NULL;
 
 CREATE FUNCTION current_team_id() RETURNS BIGINT LANGUAGE sql STABLE AS $$
-    SELECT COALESCE(NULLIF(current_setting('novanova.team_id', TRUE), ''), '0')::BIGINT
+    SELECT COALESCE(NULLIF(current_setting('sceneforge.team_id', TRUE), ''), '0')::BIGINT
 $$;
 COMMENT ON FUNCTION current_team_id() IS '当前数据库连接绑定的团队，零明确表示平台空间';
 CREATE FUNCTION team_system_access() RETURNS BOOLEAN LANGUAGE sql STABLE AS $$
-    SELECT COALESCE(NULLIF(current_setting('novanova.system_access', TRUE), ''), 'false')::BOOLEAN
+    SELECT COALESCE(NULLIF(current_setting('sceneforge.system_access', TRUE), ''), 'false')::BOOLEAN
 $$;
 COMMENT ON FUNCTION team_system_access() IS '受信任后台扫描是否允许读取跨团队数据';
 CREATE FUNCTION current_wallet_team_id() RETURNS BIGINT LANGUAGE sql STABLE AS $$
-    SELECT COALESCE(NULLIF(current_setting('novanova.wallet_team_id', TRUE), ''), '0')::BIGINT
+    SELECT COALESCE(NULLIF(current_setting('sceneforge.wallet_team_id', TRUE), ''), '0')::BIGINT
 $$;
 COMMENT ON FUNCTION current_wallet_team_id() IS '当前扣费钱包所属团队，零表示用户的平台通用钱包';
 CREATE FUNCTION team_content_scope(module TEXT) RETURNS BIGINT LANGUAGE sql STABLE AS $$
@@ -141,18 +141,18 @@ COMMENT ON FUNCTION team_content_scope(TEXT) IS '根据明确的模块继承开�
 
 -- 应用业务连接使用无超级用户权限的独立角色，保证行级策略不会被数据库账号绕过。
 DO $$ BEGIN
-    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'novanova_pro_runtime') THEN
-        CREATE ROLE novanova_pro_runtime NOLOGIN NOBYPASSRLS;
-    ELSIF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'novanova_pro_runtime' AND (rolsuper OR rolbypassrls OR rolcanlogin)) THEN
+    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'sceneforge_pro_runtime') THEN
+        CREATE ROLE sceneforge_pro_runtime NOLOGIN NOBYPASSRLS;
+    ELSIF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'sceneforge_pro_runtime' AND (rolsuper OR rolbypassrls OR rolcanlogin)) THEN
         RAISE EXCEPTION '团队业务角色存在不安全权限';
     END IF;
 END $$;
-DO $$ BEGIN EXECUTE format('GRANT novanova_pro_runtime TO %I', current_user); END $$;
-GRANT USAGE ON SCHEMA public TO novanova_pro_runtime;
-GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO novanova_pro_runtime;
-GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO novanova_pro_runtime;
-ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO novanova_pro_runtime;
-ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO novanova_pro_runtime;
+DO $$ BEGIN EXECUTE format('GRANT sceneforge_pro_runtime TO %I', current_user); END $$;
+GRANT USAGE ON SCHEMA public TO sceneforge_pro_runtime;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO sceneforge_pro_runtime;
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO sceneforge_pro_runtime;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO sceneforge_pro_runtime;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO sceneforge_pro_runtime;
 
 -- 业务表统一隔离，包括只通过父项目引用的子表；已有数据属于平台空间。
 DO $$

@@ -1,6 +1,6 @@
-# Novanova Studio Server
+# SceneForge Server
 
-基于 JDK 21、Spring Boot 3.5 WebFlux、AgentScope Java、Redis 和 PostgreSQL 的服务端。
+基于 JDK 25、Spring Boot 3.5 WebFlux、AgentScope Java、Redis 和 PostgreSQL 的服务端。
 
 ## 技术栈
 

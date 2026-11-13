@@ -37,7 +37,7 @@ test("历史导航兼容重复挂载和 Next.js 包装，取消恢复原位，�
         history.replaceState({ ...history.state, tree: "配置" }, "", "/admin/system");
         assert.equal(history.state.__NA, true);
         assert.equal(history.state.tree, "配置");
-        assert.equal(history.state.novanovaNavigation.position, 2);
+        assert.equal(history.state.sceneforgeNavigation.position, 2);
         let respond;
         let calls = 0;
         unregister = registerHistoryLeaveGuard(() => { calls += 1; return new Promise((resolve) => { respond = resolve; }); });

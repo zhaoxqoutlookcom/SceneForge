@@ -11,14 +11,18 @@
         <relativePath/>
     </parent>
 
-    <groupId>com.novanovastudio</groupId>
+    <groupId>com.sceneforge</groupId>
     <artifactId>server</artifactId>
     <version>0.0.1-SNAPSHOT</version>
-    <name>novanova-studio-server</name>
-    <description>Novanova Studio Java服务端</description>
+    <name>sceneforge-server</name>
+    <description>SceneForge Java服务端</description>
 
     <properties>
-        <java.version>21</java.version>
+        <!-- 编译与运行基线为 JDK 25；Lombok 需 >=1.18.40 才能处理 JDK 25 AST。 -->
+        <java.version>25</java.version>
+        <lombok.version>1.18.48</lombok.version>
+        <!-- JDK 23+ 默认关闭注解处理，必须显式开启，否则 Lombok getter/setter 不会生成。 -->
+        <maven.compiler.proc>full</maven.compiler.proc>
         <agentscope.version>2.0.3</agentscope.version>
         <alipay.sdk.version>4.40.272.ALL</alipay.sdk.version>
         <wechatpay.sdk.version>0.2.17</wechatpay.sdk.version>
@@ -273,6 +277,21 @@
 
     <build>
         <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <!-- JDK 23+ 需显式 full 注解处理，否则 Lombok 不生效。 -->
+                    <proc>full</proc>
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                            <version>${lombok.version}</version>
+                        </path>
+                    </annotationProcessorPaths>
+                </configuration>
+            </plugin>
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>

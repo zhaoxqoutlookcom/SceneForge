@@ -32,7 +32,7 @@ export const DEFAULT_VIDEO_LAST_USED_SETTINGS: VideoLastUsedSettings = {
 };
 
 const settingsStorage = localforage.createInstance({
-    name: "novanova-studio",
+    name: "sceneforge",
     storeName: "last_used_generation_settings",
 });
 

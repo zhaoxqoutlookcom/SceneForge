@@ -17,10 +17,10 @@ import { resolveSpaceBrand } from "@/features/team/space-brand";
 export async function generateMetadata(): Promise<Metadata> {
     const locale = await getWebsiteLocale();
     const platformBrand = resolveSpaceBrand(null);
-    const editionsPage = (await headers()).get("x-novanova-pathname") === "/editions";
+    const editionsPage = (await headers()).get("x-sceneforge-pathname") === "/editions";
     return {
-        title: editionsPage ? websiteMessages[locale].editions.compareEditionsNovanovaStudio : platformBrand.name,
-        description: editionsPage ? websiteMessages[locale].editions.compareEnterpriseFeaturesAcrossNovanovaStudioEditions : websiteMessages[locale].website.description,
+        title: editionsPage ? websiteMessages[locale].editions.compareEditionsSceneForgeStudio : platformBrand.name,
+        description: editionsPage ? websiteMessages[locale].editions.compareEnterpriseFeaturesAcrossSceneForgeStudioEditions : websiteMessages[locale].website.description,
         // PWA：仅生产构建注入 manifest（产物由 pnpm build 末尾的 generate-pwa.mjs 生成）
         ...(process.env.NODE_ENV === "production" ? { manifest: `${PWA_BASE_PATH}manifest.webmanifest` } : {}),
         applicationName: platformBrand.name,

@@ -8,7 +8,7 @@
 | --- | --- | --- |
 | PostgreSQL | 17 | 保存用户、项目、任务和资产数据。 |
 | Redis | 8.6 | 处理缓存、任务事件和 Redis Stream。 |
-| JDK | 21 | 运行 Spring Boot 服务端。 |
+| JDK | 25 | 运行 Spring Boot 服务端。 |
 | Maven | 3.9 或更高版本 | 安装依赖并启动服务端。 |
 | Node.js | 22 | 运行 Next.js 前端。 |
 | pnpm | 11.7.0 | 安装依赖并启动前端。 |
@@ -145,7 +145,7 @@ java -version
 mvn -f server/pom.xml spring-boot:run
 ```
 
-需要断点调试时，在 IDE 中以 Debug 模式运行 `com.novanovastudio.NovanovaStudioServerApplication`，并将工作目录设置为项目根目录。Spring Boot DevTools 会在编译后的类发生变化时自动重启服务。
+需要断点调试时，在 IDE 中以 Debug 模式运行 `com.sceneforge.SceneForgeServerApplication`，并将工作目录设置为项目根目录。Spring Boot DevTools 会在编译后的类发生变化时自动重启服务。
 
 ## 6. 启动和调试前端
 

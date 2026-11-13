@@ -1,43 +1,44 @@
 <p align="right"><a href="README.md">Simplified Chinese</a> · <b>English</b></p>
 
 <p align="center">
-  <img src="logo/novanovastudio.png" width="128" alt="Novanova Studio logo">
+  <img src="logo/sceneforge.png" width="128" alt="SceneForge logo">
 </p>
 
-<h1 align="center">Novanova Studio</h1>
+<h1 align="center">SceneForge</h1>
+<p align="center"><b>幕工厂</b></p>
 
 <p align="center">
-  An AI Agent-powered visual creation workspace where ideas, generation, editing, composition, and reusable results stay connected through persistent context.
-</p>
-
-<p align="center">
-  <a href="https://www.novanovastudio.cn/">>>>> Try it online if deployment or finding affordable providers feels cumbersome <<<<</a>
+  SceneForge (幕工厂) is an AI Agent-powered visual creation workspace where ideas, generation, editing, composition, and reusable results stay connected through persistent context.
 </p>
 
 <p align="center">
-  <img src="https://ai-flow-1253318092.cos.ap-singapore.myqcloud.com/novanova-studio/docs/homepage2-compressed.webp" alt="Novanova Studio 首页截图">
+  <a href="https://www.sceneforge.cn/">>>>> Try it online if deployment or finding affordable providers feels cumbersome <<<<</a>
+</p>
+
+<p align="center">
+  <img src="https://ai-flow-1253318092.cos.ap-singapore.myqcloud.com/sceneforge/docs/homepage2-compressed.webp" alt="SceneForge 首页截图">
 </p>
 <p align="center">
-  <img src="https://ai-flow-1253318092.cos.ap-singapore.myqcloud.com/novanova-studio/docs/nova-s2.png" alt="Novanova Studio 画布截图">
+  <img src="https://ai-flow-1253318092.cos.ap-singapore.myqcloud.com/sceneforge/docs/nova-s2.png" alt="SceneForge 画布截图">
 </p>
 <p align="center">
-  <img src="https://ai-flow-1253318092.cos.ap-singapore.myqcloud.com/novanova-studio/docs/fgk.png" alt="Novanova Studio 画布截图">
+  <img src="https://ai-flow-1253318092.cos.ap-singapore.myqcloud.com/sceneforge/docs/fgk.png" alt="SceneForge 画布截图">
 </p>
 <p align="center">
-  <img src="https://ai-flow-1253318092.cos.ap-singapore.myqcloud.com/novanova-studio/docs/jbcz.png" alt="Novanova Studio 剧本创作">
+  <img src="https://ai-flow-1253318092.cos.ap-singapore.myqcloud.com/sceneforge/docs/jbcz.png" alt="SceneForge 剧本创作">
 </p>
 <p align="center">
-  <img src="https://ai-flow-1253318092.cos.ap-singapore.myqcloud.com/novanova-studio/docs/mjcz.png" alt="Novanova Studio 漫剧创作">
+  <img src="https://ai-flow-1253318092.cos.ap-singapore.myqcloud.com/sceneforge/docs/mjcz.png" alt="SceneForge 漫剧创作">
 </p>
 
 ## 🚀 Docs
 
-[Docs](https://www.novanovastudio.cn/docs/en)
+[Docs](https://www.sceneforge.cn/docs/en)
 
 
 ## ✨ What It Is
 
-Novanova Studio is an AI creation workspace for independent creators and visual teams. Rather than separating images, videos, prompts, and generation records across multiple tools, it uses an **infinite canvas** as the creative context and an **AI Agent** as the center for understanding intent, choosing tools, and advancing tasks.
+SceneForge is an AI creation workspace for independent creators and visual teams. Rather than separating images, videos, prompts, and generation records across multiple tools, it uses an **infinite canvas** as the creative context and an **AI Agent** as the center for understanding intent, choosing tools, and advancing tasks.
 
 Creators can start with a natural-language goal or reference materials, then continue to converse, generate, edit, compare, and reuse results across image, video, and canvas workflows. Generation records, assets, prompts, and canvas nodes remain connected in the same creative workflow.
 
@@ -129,7 +130,7 @@ Provider keys and object-storage credentials stay on the server. Docker Compose,
 | Layer | Main Technologies | Purpose |
 | --- | --- | --- |
 | Web | Next.js 16, React 19, TypeScript, Ant Design 6, Tailwind CSS, Zustand, React Flow | Creation workspace, conversations, canvas, and configuration interface. |
-| Server | Java 21, Spring Boot 3.5, Spring WebFlux, AgentScope Java, Fastjson2 | Reactive APIs, Agent orchestration, task scheduling, authentication, and business services. |
+| Server | Java 25, Spring Boot 3.5, Spring WebFlux, AgentScope Java, Fastjson2 | Reactive APIs, Agent orchestration, task scheduling, authentication, and business services. |
 | Data and tasks | PostgreSQL 17, Flyway, R2DBC (reactive database connectivity), Redis 8.6, Redis Stream | Persistence for users, projects, tasks, assets, and generation records; asynchronous task delivery and recovery. |
 | AI and storage | OpenAI-, Evolink-, Gemini-, Agnes-, Anthropic-, Seedance-, and MiniMax-format providers; COS, OSS, Kodo, R2 | Connect models and object storage through the administrator console instead of exposing credentials in the browser. |
 | Deployment | Docker Compose, Nginx, Node.js 22, Maven | Local dependencies, containerized builds, and Linux server deployment. |
@@ -163,7 +164,7 @@ Docker deployments run Flyway migrations automatically; the current branch must 
 
 ## 📚 Related Documentation
 
-- [Novanova Studio documentation portal](/docs)
+- [SceneForge documentation portal](/docs)
 - [Engineering and API documentation](docs-api/)
 - [Product Overview](PRODUCT.md)
 - [Open Source License](LICENSE)

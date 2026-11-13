@@ -5,7 +5,7 @@ import { teamStorageKey } from "@/features/team/stores/use-team-store";
 import { batchGetServerVideoCoverAccess } from "@/services/api/server";
 
 const coverStore = localforage.createInstance({
-    name: "novanova-studio",
+    name: "sceneforge",
     storeName: "video_list_covers",
 });
 

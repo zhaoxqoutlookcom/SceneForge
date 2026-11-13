@@ -5,14 +5,14 @@ import { languageCookieMaxAge, languageCookieName, resolveWebsiteLocale } from "
 export function proxy(request: NextRequest) {
     const locale = resolveWebsiteLocale(request.nextUrl.pathname, request.cookies.get(languageCookieName)?.value, request.headers.get("accept-language"));
     const headers = new Headers(request.headers);
-    headers.set("x-novanova-language", locale);
-    headers.set("x-novanova-pathname", request.nextUrl.pathname);
+    headers.set("x-sceneforge-language", locale);
+    headers.set("x-sceneforge-pathname", request.nextUrl.pathname);
     const teamMatch = request.nextUrl.pathname.match(/^\/team\/([^/]+)(.*)$/);
     if (teamMatch) {
         const destination = request.nextUrl.clone();
         destination.pathname = teamMatch[2] || "/";
-        headers.set("x-novanova-team-slug", teamMatch[1]);
-        headers.set("x-novanova-pathname", destination.pathname);
+        headers.set("x-sceneforge-team-slug", teamMatch[1]);
+        headers.set("x-sceneforge-pathname", destination.pathname);
         return NextResponse.rewrite(destination, { request: { headers } });
     }
     const response = NextResponse.next({ request: { headers } });

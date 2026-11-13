@@ -124,7 +124,7 @@ test("登录入口与完成流程只执行一次正确的空间导航", async (c
             location.pathname = "/team/team1/auth";
             assert.equal(storeOAuth2Redirect("/team/team2/image"), false);
             assert.equal(sessionValues.size, 0);
-            sessionValues.set("novanova:oauth2:redirect:v1", "/team/team1/auth");
+            sessionValues.set("sceneforge:oauth2:redirect:v1", "/team/team1/auth");
             assert.throws(() => consumeOAuth2Redirect(), /认证页面/);
         });
         await context.test("错误密码的 401 不清理当前会话或刷新团队登录页", async () => {

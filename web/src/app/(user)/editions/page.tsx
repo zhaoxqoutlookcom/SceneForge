@@ -21,7 +21,7 @@ export default function EditionsPage() {
                 <header className="max-w-3xl border-b border-[var(--studio-line)] pb-6">
                     <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-[var(--studio-action)]">
                         <Layers3 className="size-4" aria-hidden="true" />
-                        Novanova Studio Editions
+                        SceneForge Editions
                     </div>
                     <h1 className="mt-4 text-3xl font-semibold tracking-tight text-[var(--studio-ink)] sm:text-4xl">{translate("editions.chooseYourEdition")}</h1>
                 </header>

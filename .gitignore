@@ -25,6 +25,7 @@ web/.pnpm-store/
 
 # 服务端构建
 server/target/
+server/.maven-repository/
 server/.mvn/wrapper/maven-wrapper.jar
 
 # Docker 数据卷与运行日志

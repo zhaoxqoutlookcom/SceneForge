@@ -5,7 +5,7 @@
 ## 语言选择
 
 - 工作台网址保持不变，文档保留 `/docs/zh-cn/...` 和 `/docs/en/...`。
-- 显式文档路径优先；工作台先读 `novanova_language` Cookie，再按 `Accept-Language` 权重匹配。没有匹配语言时使用简体中文。
+- 显式文档路径优先；工作台先读 `sceneforge_language` Cookie，再按 `Accept-Language` 权重匹配。没有匹配语言时使用简体中文。
 - 手动切换后 Cookie 保存一年。偏好仅保存在当前浏览器，不新增账号字段。
 - 桌面侧栏、移动导航、画布工具栏、独立认证页面和文档头部提供语言入口。
 - 切换不重新挂载工作台，不清空输入、画布、登录或正在执行的任务。
@@ -41,7 +41,7 @@ pnpm test:node src/features/locale/locale.test.ts src/features/locale/messages.t
 
 ```powershell
 cd server
-$env:JAVA_HOME="$env:USERPROFILE\.jabba\jdk\openjdk@21.0.2"
+$env:JAVA_HOME="$env:USERPROFILE\.jabba\jdk\openjdk@25.0.4"
 $env:PATH="$env:JAVA_HOME\bin;$env:PATH"
 mvn '-Dtest=WebsiteLanguageTest,SystemMessageTest,WebsiteLanguageHttpTest' test
 ```

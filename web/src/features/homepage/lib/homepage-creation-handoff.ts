@@ -37,7 +37,7 @@ export type HomepageCreationDraft = {
     videoSettings?: HomepageVideoSettings;
 };
 
-const STORAGE_KEY = "novanova:homepage-creation-handoff";
+const STORAGE_KEY = "sceneforge:homepage-creation-handoff";
 const videoModes = new Set<VideoGenerationMode>(["text-to-video", "image-to-video", "reference-to-video", "first-last-frame-to-video"]);
 
 function readStorage(): Storage | null {

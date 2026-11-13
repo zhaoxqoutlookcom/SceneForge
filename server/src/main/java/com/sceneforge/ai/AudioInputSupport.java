@@ -1,0 +1,98 @@
+package com.sceneforge.ai;
+
+import com.sceneforge.common.SystemMessage;
+
+import com.sceneforge.common.BusinessException;
+import com.sceneforge.common.ErrorCode;
+import com.sceneforge.dto.PersistenceDtos;
+import java.util.List;
+import java.util.Set;
+
+/**
+ * 视频音频输入能力和参考素材限制。
+ *
+ * @author zhenglin.cn.cq@gmail.com
+ * @date 2026-09-10 15:00
+ */
+public final class AudioInputSupport {
+    /** 独立于视频生成模式的音频输入能力标识。 */
+    public static final String CAPABILITY = "audio-input";
+    /** 支持的音频媒体类型。 */
+    private static final Set<String> MIME_TYPES = Set.of("audio/mpeg", "audio/mp3", "audio/wav", "audio/x-wav", "audio/wave");
+
+    /** 禁止实例化无状态能力工具。 */
+    private AudioInputSupport() { }
+
+    /**
+     * 校验管理员配置的输入能力与模型类型、参考模式是否一致。
+     * @param modelType String 模型类型
+     * @param capabilities List 模型能力
+     * @throws BusinessException 配置不满足音频输入条件
+     */
+    public static void validateCapability(String modelType, List<String> capabilities) {
+        if (capabilities == null || !capabilities.contains(CAPABILITY)) return;
+        if (!"video".equals(modelType) || !capabilities.contains(VideoGenerationMode.REFERENCE_TO_VIDEO)) {
+            throw new BusinessException(ErrorCode.PARAM_INVALID, SystemMessage.of("business.audioInputRequiresAVideoModelWithUniversalReference"));
+        }
+    }
+
+    /**
+     * 判断音频媒体类型。
+     * @param mimeType String 媒体类型
+     * @return boolean 是否支持
+     */
+    public static boolean isAudioMimeType(String mimeType) {
+        return mimeType != null && MIME_TYPES.contains(mimeType.toLowerCase(java.util.Locale.ROOT).split(";", 2)[0].trim());
+    }
+
+    /**
+     * 按媒体存储记录验证音频大小、时长和数量，避免使用请求伪造的元数据。
+     * @param media List 当前用户有权访问的音频媒体记录
+     * @throws BusinessException 超出限制或缺少可信元数据
+     */
+    public static void validateMedia(List<PersistenceDtos.UploadedMediaResponse> media) {
+        validateMedia(media, List.of());
+    }
+
+    /**
+     * 按媒体记录和请求裁剪区间验证音频限制。
+     * @param media List 当前用户有权访问的音频媒体记录
+     * @param references List 请求中的音频引用，顺序与媒体记录一致
+     * @throws BusinessException 超出限制或裁剪区间不合法
+     */
+    public static void validateMedia(List<PersistenceDtos.UploadedMediaResponse> media,
+                                     List<com.sceneforge.dto.AiTaskDtos.AiTaskMediaReference> references) {
+        validateMedia(media, references, 3);
+    }
+
+    /**
+     * 按调用模式的数量上限校验音频，格式、大小和裁剪规则仍统一执行。
+     * @param media List 可信媒体记录
+     * @param references List 原始引用及裁剪区间
+     * @param maximumCount int 已通过模式配置校验的音频数量上限
+     * @throws BusinessException 超出配置或媒体不合法时抛出
+     */
+    public static void validateMedia(List<PersistenceDtos.UploadedMediaResponse> media,
+            List<com.sceneforge.dto.AiTaskDtos.AiTaskMediaReference> references, int maximumCount) {
+        if (media.size() > maximumCount) throw new BusinessException(ErrorCode.PARAM_INVALID,
+                SystemMessage.of("business.videoConstraintAudioMaximum", maximumCount, media.size()));
+        long totalDuration = 0;
+        for (int index = 0; index < media.size(); index++) {
+            PersistenceDtos.UploadedMediaResponse item = media.get(index);
+            if (!isAudioMimeType(item.mimeType())) throw new BusinessException(ErrorCode.PARAM_INVALID, SystemMessage.of("business.referenceAudioSupportsMP3AndWAVOnly"));
+            if (item.bytes() == null || item.bytes() <= 0 || item.bytes() > 15L * 1024 * 1024) {
+                throw new BusinessException(ErrorCode.PARAM_INVALID, SystemMessage.of("business.invalidReferenceAudioSizeOrOver15MB"));
+            }
+            var reference = index < references.size() ? references.get(index) : null;
+            long startMs = reference == null || reference.trimStartMs() == null ? 0 : reference.trimStartMs();
+            long endMs = reference == null || reference.trimEndMs() == null ? item.durationMs() == null ? 0 : item.durationMs() : reference.trimEndMs();
+            if (item.durationMs() == null || item.durationMs() < 1 || startMs < 0 || endMs > item.durationMs() || endMs <= startMs) {
+                throw new BusinessException(ErrorCode.PARAM_INVALID, SystemMessage.of("business.invalidAudioTrimRangeOrMissingDuration"));
+            }
+            long effectiveDuration = endMs - startMs;
+            if (effectiveDuration < 2000 || effectiveDuration > 15000) throw new BusinessException(ErrorCode.PARAM_INVALID, SystemMessage.of("business.eachReferenceAudioMustBe215Seconds"));
+            totalDuration += effectiveDuration;
+        }
+        if (totalDuration > 15000) throw new BusinessException(ErrorCode.PARAM_INVALID, SystemMessage.of("business.totalReferenceAudioDurationMustNotExceed15Seconds"));
+    }
+}

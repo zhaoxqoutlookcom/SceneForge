@@ -635,7 +635,7 @@ export function createObjectStorageConfig(input: Partial<ObjectStorageConfig> = 
         bucket: input.bucket || "",
         region: input.region || "",
         endpoint: input.endpoint || "",
-        directory: input.directory || "novanova-studio",
+        directory: input.directory || "sceneforge",
         publicBaseUrl: input.publicBaseUrl || "",
         lastTestedAt: input.lastTestedAt || "",
         defaultStorage: Boolean(input.defaultStorage),

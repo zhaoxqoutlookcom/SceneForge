@@ -1,6 +1,6 @@
 -- 所有积分统一为六位小数，历史整数精确转换，不存在双写账户。
 CREATE FUNCTION current_admin_team_filter() RETURNS BIGINT LANGUAGE sql STABLE AS $$
-    SELECT COALESCE(NULLIF(current_setting('novanova.filter_team_id', TRUE), ''), '-1')::BIGINT
+    SELECT COALESCE(NULLIF(current_setting('sceneforge.filter_team_id', TRUE), ''), '-1')::BIGINT
 $$;
 COMMENT ON FUNCTION current_admin_team_filter() IS '超级管理员的团队统计筛选，负一表示不限团队，不能用作成员鉴权';
 CREATE UNIQUE INDEX uk_team_pending_invitation ON team_invitations(team_id, email) WHERE invitation_status = 'pending';
@@ -205,8 +205,8 @@ COMMENT ON COLUMN creation_agent_request.storage_id_snapshot IS '创建主Agent�
 CREATE FUNCTION capture_task_resources() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
     SELECT storage_id INTO NEW.storage_id_snapshot FROM platform_object_storage_configs storages WHERE status = 1
-      AND (storage_id = NULLIF(current_setting('novanova.storage_snapshot', TRUE), '')
-        OR (NULLIF(current_setting('novanova.storage_snapshot', TRUE), '') IS NULL AND ((NEW.team_id = 0 AND storages.team_id = 0 AND is_default) OR (NEW.team_id > 0 AND EXISTS (
+      AND (storage_id = NULLIF(current_setting('sceneforge.storage_snapshot', TRUE), '')
+        OR (NULLIF(current_setting('sceneforge.storage_snapshot', TRUE), '') IS NULL AND ((NEW.team_id = 0 AND storages.team_id = 0 AND is_default) OR (NEW.team_id > 0 AND EXISTS (
         SELECT 1 FROM team_resource_preferences preferences WHERE preferences.team_id = NEW.team_id
         AND resource_type = 'objectStorage' AND resource_id = storage_id AND enabled AND preferences.is_default))))) LIMIT 1;
     IF TG_TABLE_NAME = 'ai_generation_tasks' THEN

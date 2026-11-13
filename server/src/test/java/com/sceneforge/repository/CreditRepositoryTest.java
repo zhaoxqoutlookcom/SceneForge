@@ -1,0 +1,267 @@
+package com.sceneforge.repository;
+
+import java.time.LocalDate;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
+
+/**
+ * 积分仓储测试。
+ *
+ * @author   zhenglin.cn.cq@gmail.com
+ * @date     2026-07-19 14:45
+ */
+class CreditRepositoryTest {
+
+    /**
+     * 类型筛选条件后应与聚合子句保持分隔。
+     */
+    @Test
+    void shouldSeparateGenerationTypeParameterFromGroupByClause() {
+        CreditRepository.CreditConsumptionQuery query = new CreditRepository.CreditConsumptionQuery(
+                1L,
+                LocalDate.of(2026, 7, 1),
+                LocalDate.of(2026, 7, 1),
+                OffsetDateTime.of(2026, 7, 1, 0, 0, 0, 0, ZoneOffset.ofHours(8)),
+                OffsetDateTime.of(2026, 7, 2, 0, 0, 0, 0, ZoneOffset.ofHours(8)),
+                "image");
+
+        String sql = CreditRepository.consumptionQuery(query) + "GROUP BY tasks.task_type";
+
+        Assertions.assertTrue(sql.contains(":generationType\nGROUP BY"));
+    }
+
+    /**
+     * 未指定用户时应构建全部用户查询条件。
+     */
+    @Test
+    void shouldOmitUserConditionForAllUserConsumptionQuery() {
+        CreditRepository.CreditConsumptionQuery query = new CreditRepository.CreditConsumptionQuery(
+                null,
+                LocalDate.of(2026, 7, 1),
+                LocalDate.of(2026, 7, 1),
+                OffsetDateTime.of(2026, 7, 1, 0, 0, 0, 0, ZoneOffset.ofHours(8)),
+                OffsetDateTime.of(2026, 7, 2, 0, 0, 0, 0, ZoneOffset.ofHours(8)),
+                null);
+
+        String sql = CreditRepository.consumptionQuery(query);
+
+        Assertions.assertFalse(sql.contains(":userId"));
+        Assertions.assertTrue(sql.contains("credit_transactions.transaction_type = 'task_charge'"));
+    }
+
+    /**
+     * 卡密库存筛选应组合批次、状态和兑换用户条件。
+     */
+    @Test
+    void shouldBuildCreditCardInventoryFilters() {
+        CreditCardRepository.CardListQuery query = new CreditCardRepository.CardListQuery(8L, "redeemed", "hash", null, "user@example.com");
+
+        String sql = CreditCardRepository.cardFilters(query);
+
+        Assertions.assertTrue(sql.contains("cards.batch_id = :batchId"));
+        Assertions.assertTrue(sql.contains("cards.redeemed_at IS NOT NULL"));
+        Assertions.assertTrue(sql.contains("cards.code_hash = :codeHash"));
+        Assertions.assertTrue(sql.contains(":redeemedUserKeyword"));
+        Assertions.assertTrue(sql.endsWith("\n"));
+    }
+
+    /**
+     * 兑换记录筛选条件后应保留换行，避免与排序子句黏连。
+     */
+    @Test
+    void shouldKeepLineBreakAfterRedemptionFilters() {
+        CreditCardRepository.RedemptionQuery query = new CreditCardRepository.RedemptionQuery(1L, null, null, "hash", null);
+
+        Assertions.assertTrue(CreditCardRepository.redemptionFilters(query).endsWith("\n"));
+    }
+
+    /**
+     * 管理员任务记录查询默认覆盖全部用户并保留任务筛选。
+     */
+    @Test
+    void shouldBuildAllUserTaskRecordQueryWithFilters() {
+        CreditRepository.TaskRecordQuery query = new CreditRepository.TaskRecordQuery(
+                null,
+                OffsetDateTime.of(2026, 7, 1, 0, 0, 0, 0, ZoneOffset.ofHours(8)),
+                OffsetDateTime.of(2026, 8, 1, 0, 0, 0, 0, ZoneOffset.ofHours(8)),
+                "video",
+                "模型关键词");
+
+        String sql = CreditRepository.taskRecordQuery(query);
+        String adminSql = CreditRepository.adminTaskRecordQuery(query);
+
+        Assertions.assertTrue(adminSql.contains("LEFT JOIN users users ON users.id = tasks.user_id"));
+        Assertions.assertFalse(sql.contains("LEFT JOIN users"));
+        Assertions.assertTrue(sql.contains("tasks.task_type IN ('image', 'video')"));
+        Assertions.assertTrue(sql.contains("tasks.data_purged = FALSE"));
+        Assertions.assertTrue(sql.contains("tasks.task_type = :taskType"));
+        Assertions.assertTrue(sql.contains("tasks.model ILIKE :keyword"));
+        Assertions.assertFalse(sql.contains("tasks.user_id = :userId"));
+    }
+
+    /**
+     * 个人任务记录查询应继续限定当前用户。
+     */
+    @Test
+    void shouldKeepUserConditionForPersonalTaskRecordQuery() {
+        CreditRepository.TaskRecordQuery query = new CreditRepository.TaskRecordQuery(
+                8L,
+                OffsetDateTime.of(2026, 7, 1, 0, 0, 0, 0, ZoneOffset.ofHours(8)),
+                OffsetDateTime.of(2026, 8, 1, 0, 0, 0, 0, ZoneOffset.ofHours(8)),
+                null,
+                null);
+
+        Assertions.assertTrue(CreditRepository.taskRecordQuery(query).contains("tasks.user_id = :userId"));
+    }
+
+    /**
+     * 增加方向筛选应限定正数积分变动。
+     */
+    @Test
+    void shouldFilterAddDirectionByPositiveChangeAmount() {
+        CreditRepository.UserCreditQuery query = new CreditRepository.UserCreditQuery(
+                1L,
+                LocalDate.of(2026, 7, 1),
+                LocalDate.of(2026, 7, 1),
+                OffsetDateTime.of(2026, 7, 1, 0, 0, 0, 0, ZoneOffset.ofHours(8)),
+                OffsetDateTime.of(2026, 7, 2, 0, 0, 0, 0, ZoneOffset.ofHours(8)),
+                "add",
+                null,
+                null);
+
+        String sql = CreditRepository.userTransactionQuery(query);
+
+        Assertions.assertTrue(sql.contains("credit_transactions.change_amount > 0"));
+    }
+
+    /**
+     * 消耗方向筛选应排除已退款的扣费流水。
+     */
+    @Test
+    void shouldExcludeRefundedTaskChargeForSpendDirection() {
+        CreditRepository.UserCreditQuery query = new CreditRepository.UserCreditQuery(
+                1L,
+                LocalDate.of(2026, 7, 1),
+                LocalDate.of(2026, 7, 1),
+                OffsetDateTime.of(2026, 7, 1, 0, 0, 0, 0, ZoneOffset.ofHours(8)),
+                OffsetDateTime.of(2026, 7, 2, 0, 0, 0, 0, ZoneOffset.ofHours(8)),
+                "spend",
+                null,
+                null);
+
+        String sql = CreditRepository.userTransactionQuery(query);
+
+        Assertions.assertTrue(sql.contains("credit_transactions.change_amount < 0"));
+        Assertions.assertTrue(sql.contains("transaction_type = 'task_refund'"));
+    }
+
+    /**
+     * 来源筛选为卡密兑换时限定流水类型。
+     */
+    @Test
+    void shouldFilterSourceByTransactionType() {
+        CreditRepository.UserCreditQuery query = new CreditRepository.UserCreditQuery(
+                1L,
+                LocalDate.of(2026, 7, 1),
+                LocalDate.of(2026, 7, 1),
+                OffsetDateTime.of(2026, 7, 1, 0, 0, 0, 0, ZoneOffset.ofHours(8)),
+                OffsetDateTime.of(2026, 7, 2, 0, 0, 0, 0, ZoneOffset.ofHours(8)),
+                null,
+                "card_redeem",
+                null);
+
+        String sql = CreditRepository.userTransactionQuery(query);
+
+        Assertions.assertTrue(sql.contains("credit_transactions.transaction_type = :source"));
+        Assertions.assertFalse(sql.contains("tasks.task_type"));
+    }
+
+    /**
+     * 来源筛选为图片生成时限定任务类型。
+     */
+    @Test
+    void shouldFilterSourceByGenerationTaskType() {
+        CreditRepository.UserCreditQuery query = new CreditRepository.UserCreditQuery(
+                1L,
+                LocalDate.of(2026, 7, 1),
+                LocalDate.of(2026, 7, 1),
+                OffsetDateTime.of(2026, 7, 1, 0, 0, 0, 0, ZoneOffset.ofHours(8)),
+                OffsetDateTime.of(2026, 7, 2, 0, 0, 0, 0, ZoneOffset.ofHours(8)),
+                null,
+                "image",
+                null);
+
+        String sql = CreditRepository.userTransactionQuery(query);
+
+        Assertions.assertTrue(sql.contains("tasks.task_type = :source"));
+        Assertions.assertFalse(sql.contains("credit_transactions.transaction_type = :source"));
+    }
+
+    /**
+     * 管理员明细查询未指定用户时应覆盖全部用户并关联用户信息。
+     */
+    @Test
+    void shouldOmitUserConditionForAllUserAdminTransactionQuery() {
+        CreditRepository.UserCreditQuery query = new CreditRepository.UserCreditQuery(
+                null,
+                LocalDate.of(2026, 7, 1),
+                LocalDate.of(2026, 7, 1),
+                OffsetDateTime.of(2026, 7, 1, 0, 0, 0, 0, ZoneOffset.ofHours(8)),
+                OffsetDateTime.of(2026, 7, 2, 0, 0, 0, 0, ZoneOffset.ofHours(8)),
+                null,
+                null,
+                null);
+
+        String sql = CreditRepository.adminTransactionQuery(query);
+
+        Assertions.assertTrue(sql.contains("JOIN users users ON users.id = credit_transactions.user_id"));
+        Assertions.assertFalse(sql.contains(":userId"));
+        Assertions.assertFalse(sql.contains("transaction_type = 'task_charge'"));
+    }
+
+    /**
+     * 管理员明细查询带搜索词时应按用户名、昵称或邮箱模糊匹配。
+     */
+    @Test
+    void shouldFilterAdminTransactionQueryByUserKeyword() {
+        CreditRepository.UserCreditQuery query = new CreditRepository.UserCreditQuery(
+                null,
+                LocalDate.of(2026, 7, 1),
+                LocalDate.of(2026, 7, 1),
+                OffsetDateTime.of(2026, 7, 1, 0, 0, 0, 0, ZoneOffset.ofHours(8)),
+                OffsetDateTime.of(2026, 7, 2, 0, 0, 0, 0, ZoneOffset.ofHours(8)),
+                null,
+                null,
+                "user8@example.com");
+
+        String sql = CreditRepository.adminTransactionQuery(query);
+
+        Assertions.assertTrue(sql.contains("users.username ILIKE :keyword"));
+        Assertions.assertTrue(sql.contains("users.nickname ILIKE :keyword"));
+        Assertions.assertTrue(sql.contains("users.email ILIKE :keyword"));
+    }
+
+    /**
+     * 管理员明细查询指定用户且按签到来源筛选时应限定用户与流水类型。
+     */
+    @Test
+    void shouldLimitAdminTransactionQueryToSelectedUserAndSource() {
+        CreditRepository.UserCreditQuery query = new CreditRepository.UserCreditQuery(
+                8L,
+                LocalDate.of(2026, 7, 1),
+                LocalDate.of(2026, 7, 1),
+                OffsetDateTime.of(2026, 7, 1, 0, 0, 0, 0, ZoneOffset.ofHours(8)),
+                OffsetDateTime.of(2026, 7, 2, 0, 0, 0, 0, ZoneOffset.ofHours(8)),
+                null,
+                "daily_check_in",
+                null);
+
+        String sql = CreditRepository.adminTransactionQuery(query);
+
+        Assertions.assertTrue(sql.contains("credit_transactions.user_id = :userId"));
+        Assertions.assertTrue(sql.contains("credit_transactions.transaction_type = :source"));
+        Assertions.assertTrue(sql.endsWith("\n"));
+    }
+}

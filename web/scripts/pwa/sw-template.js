@@ -1,8 +1,8 @@
 /**
- * Novanova Studio PWA Service Worker 模板。
+ * SceneForge PWA Service Worker 模板。
  *
  * 设计原则：保守缓存，永不缓存页面 HTML 与业务数据（登录态过期、数据陈旧、安全风险）。
- * 由 scripts/generate-pwa.mjs 在生产构建后替换占位符并输出 public/novanova-sw.js。
+ * 由 scripts/generate-pwa.mjs 在生产构建后替换占位符并输出 public/sceneforge-sw.js。
  */
 
 /** 缓存前缀：activate 阶段按前缀清理旧版本缓存。 */

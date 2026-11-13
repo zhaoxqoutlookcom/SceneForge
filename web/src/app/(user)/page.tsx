@@ -11,7 +11,7 @@ import { FantasticShow } from "@/features/shared-work/components/fantastic-show"
 import { useSpaceBrand } from "@/features/team/use-space-brand";
 
 const icpRecordNumber = process.env.NEXT_PUBLIC_ICP_RECORD_NUMBER?.trim();
-const nanaFont = { fontFamily: '"Nana Fredoka", "Novanova Bricolage", sans-serif' } as const;
+const nanaFont = { fontFamily: '"Nana Fredoka", "SceneForge Bricolage", sans-serif' } as const;
 
 function renderGreeting(text: string) {
     const start = text.toLowerCase().indexOf("nana");

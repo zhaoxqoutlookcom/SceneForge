@@ -62,8 +62,8 @@ export function AppProviders({
         dayjs.locale(locale);
         synchronizeDocumentBrand(brand, pathname, {
             description: websiteMessages[locale].website.description,
-            editionsTitle: websiteMessages[locale].editions.compareEditionsNovanovaStudio,
-            editionsDescription: websiteMessages[locale].editions.compareEnterpriseFeaturesAcrossNovanovaStudioEditions,
+            editionsTitle: websiteMessages[locale].editions.compareEditionsSceneForgeStudio,
+            editionsDescription: websiteMessages[locale].editions.compareEnterpriseFeaturesAcrossSceneForgeStudioEditions,
         });
     }, [brand, locale, pathname]);
 

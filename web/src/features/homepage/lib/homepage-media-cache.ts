@@ -1,7 +1,7 @@
 import localforage from "localforage";
 
 const mediaStore = localforage.createInstance({
-    name: "novanova-studio",
+    name: "sceneforge",
     storeName: "homepage_media",
 });
 

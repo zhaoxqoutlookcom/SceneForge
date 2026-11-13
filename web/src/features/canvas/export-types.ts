@@ -1,6 +1,6 @@
 import type { CanvasDocument } from "./types";
 
-export const CANVAS_EXPORT_APP_ID = "novanova-studio";
+export const CANVAS_EXPORT_APP_ID = "sceneforge";
 export const CANVAS_EXPORT_VERSION = 4;
 export const CANVAS_EXPORT_MANIFEST_NAME = "canvas-documents.json";
 

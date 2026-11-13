@@ -6924,7 +6924,7 @@ CREATE INDEX idx_homepage_showcases_admin ON homepage_showcases(deleted_at, upda
 -- ============================================================
 ALTER TABLE homepage_showcases
     ADD COLUMN category VARCHAR(50) NOT NULL DEFAULT '其他',
-    ADD COLUMN creator_name VARCHAR(100) NOT NULL DEFAULT 'Novanova Studio';
+    ADD COLUMN creator_name VARCHAR(100) NOT NULL DEFAULT 'SceneForge';
 
 COMMENT ON COLUMN homepage_showcases.category IS '作品分类，用于首页精彩创作筛选';
 COMMENT ON COLUMN homepage_showcases.creator_name IS '创作者名称，用于首页精彩创作署名';

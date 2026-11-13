@@ -5,8 +5,8 @@
  *
  * 在 `next build` 之后运行，向 public/ 输出三个文件：
  *   - manifest.webmanifest   Web App Manifest
- *   - novanova-offline.html  离线回退页（内联样式 + 构建期编译的双语字典）
- *   - novanova-sw.js         Service Worker（替换模板占位符 + 内容哈希版本号）
+ *   - sceneforge-offline.html  离线回退页（内联样式 + 构建期编译的双语字典）
+ *   - sceneforge-sw.js         Service Worker（替换模板占位符 + 内容哈希版本号）
  *
  * 缓存版本号 = sha256(base + 构建产物代码内容 + 图标内容 + 离线页 + manifest + SW 模板)
  * 前 16 位，任何产物变化版本号必变，保证缓存精确失效。
@@ -138,8 +138,8 @@ verifyRuntimeConstants(base);
 const messages = readPwaMessages();
 
 const ICON_DIR = `${base}pwa/`;
-const OFFLINE_FILE = "novanova-offline.html";
-const SW_FILE = "novanova-sw.js";
+const OFFLINE_FILE = "sceneforge-offline.html";
+const SW_FILE = "sceneforge-sw.js";
 const OFFLINE_URL = `${base}${OFFLINE_FILE}`;
 const iconAssets = ["icon-192.png", "icon-512.png", "maskable-192.png", "maskable-512.png", "apple-touch-icon.png", "favicon-32.png", "favicon.svg"];
 
@@ -164,7 +164,7 @@ const manifest = {
 };
 const manifestContent = `${JSON.stringify(manifest, null, 2)}\n`;
 
-/* ------------------------------- novanova-offline.html ------------------------------ */
+/* ------------------------------- sceneforge-offline.html ------------------------------ */
 
 const offlineTemplate = fs.readFileSync(path.join(webDir, "scripts/pwa/offline-template.html"), "utf8");
 const offlineDict = Object.fromEntries(Object.entries(messages).map(([locale, dict]) => [locale, Object.fromEntries(OFFLINE_KEYS.map((key) => [key, dict[key]]))]));
@@ -177,7 +177,7 @@ const offlineContent = offlineTemplate
     .replaceAll("__PWA_ICON_URL__", `${ICON_DIR}icon-192.png`)
     .replaceAll("__PWA_OFFLINE_DICT__", JSON.stringify(offlineDict));
 
-/* --------------------------------- novanova-sw.js ---------------------------------- */
+/* --------------------------------- sceneforge-sw.js ---------------------------------- */
 
 const swTemplate = fs.readFileSync(path.join(webDir, "scripts/pwa/sw-template.js"), "utf8");
 const publicAssets = [OFFLINE_URL, ...iconAssets.map((name) => `${ICON_DIR}${name}`)];

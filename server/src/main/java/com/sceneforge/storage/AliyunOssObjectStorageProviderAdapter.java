@@ -1,0 +1,245 @@
+package com.sceneforge.storage;
+
+import com.sceneforge.common.SystemMessage;
+
+import com.aliyun.oss.ClientBuilderConfiguration;
+import com.aliyun.oss.OSS;
+import com.aliyun.oss.OSSClientBuilder;
+import com.aliyun.oss.common.auth.DefaultCredentialProvider;
+import com.aliyun.oss.common.comm.SignVersion;
+import com.aliyun.oss.model.CannedAccessControlList;
+import com.aliyun.oss.model.ObjectMetadata;
+import com.sceneforge.common.BusinessException;
+import com.sceneforge.common.ErrorCode;
+import com.sceneforge.dto.PersistenceDtos;
+import java.io.InputStream;
+import java.net.URI;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Component;
+import org.springframework.util.StringUtils;
+
+/**
+ * 阿里云OSS对象存储适配器。
+ *
+ * @author zhenglin.cn.cq@gmail.com
+ * @date 2026-07-19 00:00
+ */
+@Slf4j
+@Component
+public class AliyunOssObjectStorageProviderAdapter implements ObjectStorageProviderAdapter {
+
+    /** 阿里云OSS服务商标识。 */
+    public static final String PROVIDER = "aliyunOss";
+
+    /**
+     * 获取阿里云OSS服务商标识。
+     *
+     * @return String 阿里云OSS服务商标识
+     */
+    @Override
+    public String provider() {
+        return PROVIDER;
+    }
+
+    /**
+     * @param config 原对象存储配置
+     * @param key 对象键
+     * @param fileName 原始文件名
+     * @param mimeType 文件媒体类型
+     * @param download 是否附件下载
+     * @param expiresAt 到期时间
+     * @return 阿里云SDK签发的临时GET地址
+     */
+    @Override
+    public String createReadUrl(PersistenceDtos.ObjectStorageConfig config, String key, String fileName, String mimeType, boolean download, java.time.Instant expiresAt) {
+        return presign(config, key, fileName, mimeType, download, expiresAt, null);
+    }
+
+    /**
+     * 签发带图片处理的读取地址，长边不超过指定像素，不放大小图。
+     *
+     * @param config 原对象存储配置
+     * @param key 对象键
+     * @param fileName 原始文件名
+     * @param mimeType 文件媒体类型
+     * @param download 是否附件下载
+     * @param expiresAt 到期时间
+     * @param edge 缩放后的长边像素
+     * @return 带 image/resize 的临时 GET 地址
+     */
+    @Override
+    public String createThumbnailReadUrl(PersistenceDtos.ObjectStorageConfig config, String key, String fileName, String mimeType, boolean download, java.time.Instant expiresAt, int edge) {
+        int size = Math.max(1, edge);
+        return presign(config, key, fileName, mimeType, download, expiresAt, "image/resize,m_lfit,w_" + size + ",h_" + size);
+    }
+
+    /**
+     * 用阿里云 SDK 签发临时 GET 地址。
+     *
+     * @param config 原对象存储配置
+     * @param key 对象键
+     * @param fileName 原始文件名
+     * @param mimeType 文件媒体类型
+     * @param download 是否附件下载
+     * @param expiresAt 到期时间
+     * @param process 图片处理参数，原图读取时为空
+     * @return 临时 GET 地址
+     */
+    private String presign(PersistenceDtos.ObjectStorageConfig config, String key, String fileName, String mimeType, boolean download, java.time.Instant expiresAt, String process) {
+        validate(config);
+        ClientBuilderConfiguration clientConfiguration = new ClientBuilderConfiguration();
+        clientConfiguration.setSignatureVersion(SignVersion.V4);
+        OSS client = OSSClientBuilder.create().credentialsProvider(new DefaultCredentialProvider(config.accessKey(), config.secretKey()))
+                .clientConfiguration(clientConfiguration).region(config.region()).endpoint(config.endpoint()).build();
+        try {
+            var request = new com.aliyun.oss.model.GeneratePresignedUrlRequest(config.bucket(), key, com.aliyun.oss.HttpMethod.GET);
+            request.setExpiration(java.util.Date.from(expiresAt));
+            if (org.springframework.util.StringUtils.hasText(process)) {
+                request.setProcess(process);
+            }
+            var headers = new com.aliyun.oss.model.ResponseHeaderOverrides();
+            if (org.springframework.util.StringUtils.hasText(fileName)) {
+                headers.setContentDisposition(org.springframework.http.ContentDisposition.builder(download ? "attachment" : "inline")
+                        .filename(fileName, java.nio.charset.StandardCharsets.UTF_8).build().toString());
+            }
+            if (org.springframework.util.StringUtils.hasText(mimeType)) {
+                headers.setContentType(mimeType);
+            }
+            request.setResponseHeaders(headers);
+            return client.generatePresignedUrl(request).toString();
+        } finally { client.shutdown(); }
+    }
+
+    /**
+     * 读取存储空间 ACL 确认匿名读取已关闭。
+     *
+     * @param config ObjectStorageConfig 对象存储配置
+     * @return boolean 是否已确认空间私有
+     */
+    @Override
+    public boolean verifyPrivateBucket(PersistenceDtos.ObjectStorageConfig config) {
+        validate(config);
+        ClientBuilderConfiguration clientConfiguration = new ClientBuilderConfiguration();
+        clientConfiguration.setSignatureVersion(SignVersion.V4);
+        OSS client = OSSClientBuilder.create().credentialsProvider(new DefaultCredentialProvider(config.accessKey(), config.secretKey()))
+                .clientConfiguration(clientConfiguration).region(config.region()).endpoint(config.endpoint()).build();
+        try {
+            return client.getBucketAcl(config.bucket()).getCannedACL() == CannedAccessControlList.Private;
+        } catch (RuntimeException exception) {
+            log.error("验证阿里云OSS私有空间失败: bucket={}", config.bucket(), exception);
+            throw new BusinessException(ErrorCode.THIRD_PARTY_CALL_ERROR, "无法验证阿里云OSS私有访问，请检查对象存储配置");
+        } finally {
+            client.shutdown();
+        }
+    }
+
+    /**
+     * 物理删除对象，缺失对象由云端SDK按幂等删除处理。
+     * @param config 对象存储配置
+     * @param key 对象键
+     */
+    @Override
+    public void deletePrivateObject(PersistenceDtos.ObjectStorageConfig config, String key) {
+        validate(config);
+        OSS client = new OSSClientBuilder().build(config.endpoint(), config.accessKey(), config.secretKey());
+        try { client.deleteObject(config.bucket(), key); }
+        finally { client.shutdown(); }
+    }
+
+    /**
+     * 在上传请求中设置私有权限，避免上传后再修改权限产生公开窗口。
+     * @param config 已验证的存储配置
+     * @param key 专用对象键
+     * @param file 临时媒体文件
+     * @throws BusinessException 上传或权限设置失败时抛出
+     */
+    @Override
+    public void putPrivateObject(PersistenceDtos.ObjectStorageConfig config, String key, java.nio.file.Path file) {
+        putPrivateObject(config, key, file, "application/octet-stream");
+    }
+
+    /** @param config 私有存储配置 @param key 专用对象键 @param file 临时文件 @param mimeType 服务端确认的实际媒体类型 */
+    @Override
+    public void putPrivateObject(PersistenceDtos.ObjectStorageConfig config, String key, java.nio.file.Path file, String mimeType) {
+        validate(config);
+        OSS client = new OSSClientBuilder().build(config.endpoint(), config.accessKey(), config.secretKey());
+        try {
+            ObjectMetadata metadata = new ObjectMetadata();
+            metadata.setContentType(mimeType);
+            metadata.setObjectAcl(com.aliyun.oss.model.CannedAccessControlList.Private);
+            var request = new com.aliyun.oss.model.PutObjectRequest(config.bucket(), key, file.toFile());
+            request.setMetadata(metadata);
+            client.putObject(request);
+        } catch (RuntimeException exception) {
+            log.error("上传阿里云私有对象失败：key={}", key, exception);
+            throw new BusinessException(ErrorCode.THIRD_PARTY_CALL_ERROR, "上传阿里云私有对象失败，请检查对象存储权限");
+        } finally { client.shutdown(); }
+    }
+
+    /**
+     * 校验阿里云OSS配置。
+     *
+     * @param config ObjectStorageConfig 对象存储配置
+     * @throws BusinessException 配置不完整或Endpoint不合法时抛出
+     */
+    @Override
+    public void validate(PersistenceDtos.ObjectStorageConfig config) {
+        ObjectStorageUrlBuilder.requireText(config.accessKey(), SystemMessage.of("business.alibabaCloudOSSAccessKeyID"));
+        ObjectStorageUrlBuilder.requireText(config.secretKey(), SystemMessage.of("business.alibabaCloudOSSAccessKeySecret"));
+        ObjectStorageUrlBuilder.requireText(config.bucket(), SystemMessage.of("business.alibabaCloudOSSBucket"));
+        ObjectStorageUrlBuilder.requireText(config.region(), SystemMessage.of("business.alibabaCloudOSSRegionID"));
+        ObjectStorageUrlBuilder.requireHttpUrl(config.endpoint(), SystemMessage.of("business.alibabaCloudOSSEndpoint"));
+        if (StringUtils.hasText(config.publicBaseUrl())) {
+            ObjectStorageUrlBuilder.requireHttpUrl(config.publicBaseUrl(), SystemMessage.of("business.alibabaCloudOSSPublicURL"));
+        }
+    }
+
+    /**
+     * 上传对象到阿里云OSS。
+     *
+     * @param config ObjectStorageConfig 对象存储配置
+     * @param key String 对象键
+     * @param inputStream InputStream 文件流
+     * @param contentLength long 文件大小
+     * @param mimeType String MIME类型
+     * @return String 公开访问地址
+     * @throws BusinessException 上传失败或配置不合法时抛出
+     */
+    @Override
+    public String putObject(PersistenceDtos.ObjectStorageConfig config, String key, InputStream inputStream, long contentLength, String mimeType) {
+        validate(config);
+        ClientBuilderConfiguration clientConfiguration = new ClientBuilderConfiguration();
+        clientConfiguration.setSignatureVersion(SignVersion.V4);
+        OSS client = OSSClientBuilder.create()
+                .credentialsProvider(new DefaultCredentialProvider(config.accessKey().trim(), config.secretKey().trim()))
+                .clientConfiguration(clientConfiguration)
+                .region(config.region().trim())
+                .endpoint(config.endpoint().trim())
+                .build();
+        try {
+            ObjectMetadata metadata = new ObjectMetadata();
+            metadata.setContentLength(contentLength);
+            if (StringUtils.hasText(mimeType)) {
+                metadata.setContentType(mimeType);
+            }
+            client.putObject(config.bucket().trim(), key, inputStream, metadata);
+            return ObjectStorageUrlBuilder.buildPublicUrl(StringUtils.hasText(config.publicBaseUrl()) ? config.publicBaseUrl() : defaultPublicBaseUrl(config), key);
+        } catch (RuntimeException exception) {
+            log.error("上传阿里云OSS失败: bucket={}, region={}, key={}", config.bucket(), config.region(), key, exception);
+            throw new BusinessException(ErrorCode.THIRD_PARTY_CALL_ERROR, SystemMessage.of("business.alibabaCloudOSSUploadFailed", exception.getMessage()));
+        } finally {
+            client.shutdown();
+        }
+    }
+
+    /**
+     * 根据公开Endpoint构建默认访问基础地址。
+     *
+     * @param config ObjectStorageConfig 对象存储配置
+     * @return String 默认公开访问基础地址
+     */
+    private String defaultPublicBaseUrl(PersistenceDtos.ObjectStorageConfig config) {
+        URI endpoint = URI.create(config.endpoint().trim());
+        return endpoint.getScheme() + "://" + config.bucket().trim() + "." + endpoint.getHost();
+    }
+}

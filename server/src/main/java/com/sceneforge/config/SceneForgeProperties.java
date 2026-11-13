@@ -1,0 +1,1624 @@
+package com.sceneforge.config;
+
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.Min;
+import java.util.concurrent.atomic.AtomicReference;
+import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.validation.annotation.Validated;
+
+/**
+ * @title        SceneForgeProperties.java
+ * @author       zhenglin.cn.cq@gmail.com
+ * @description  SceneForge服务端配置属性
+ * @createTime   2026-06-24 10:42:00
+ */
+@Validated
+@ConfigurationProperties(prefix = "sceneforge")
+public class SceneForgeProperties {
+
+    /** app */
+    private App app = new App();
+
+    /** cors */
+    private Cors cors = new Cors();
+
+    /** admin */
+    private Admin admin = new Admin();
+
+    /** ai */
+    private Ai ai = new Ai();
+
+    /** 对象存储配置 */
+    @Valid
+    private ObjectStorage objectStorage = new ObjectStorage();
+
+    /** 支付宝电脑网站支付配置 */
+    private Alipay alipay = new Alipay();
+
+    /** 微信 Native 扫码支付配置。 */
+    private Wechat wechat = new Wechat();
+
+    /** 平台超时设置快照。数据库加载前使用与迁移默认值一致的初始值。 */
+    private final AtomicReference<RuntimeTimeouts> timeoutSettings = new AtomicReference<>(RuntimeTimeouts.defaults());
+
+    /** 平台邮件服务配置快照。数据库加载前使用与迁移默认值一致的初始值，授权码保持明文仅存在于本进程。 */
+    private final AtomicReference<RuntimeEmailSettings> emailSettings = new AtomicReference<>(RuntimeEmailSettings.defaults());
+
+    /**
+     * 获取微信支付配置。
+     * @return 微信支付配置
+     */
+    public Wechat getWechat() {
+        return wechat;
+    }
+
+    /**
+     * 设置微信支付配置。
+     * @param wechat 微信支付配置
+     */
+    public void setWechat(Wechat wechat) {
+        this.wechat = wechat;
+    }
+
+    /**
+     * 读取当前超时设置。
+     *
+     * @return RuntimeTimeouts 超时快照
+     */
+    public RuntimeTimeouts timeoutSettings() {
+        return timeoutSettings.get();
+    }
+
+    /**
+     * 用平台超时设置覆盖运行时快照。
+     *
+     * @param settings RuntimeTimeouts 超时快照
+     */
+    public void replaceTimeoutSettings(RuntimeTimeouts settings) {
+        timeoutSettings.set(settings == null ? RuntimeTimeouts.defaults() : settings);
+    }
+
+    /**
+     * 读取当前邮件服务配置。
+     *
+     * @return RuntimeEmailSettings 邮件服务快照，授权码为明文
+     */
+    public RuntimeEmailSettings emailSettings() {
+        return emailSettings.get();
+    }
+
+    /**
+     * 用平台邮件服务配置覆盖运行时快照。
+     *
+     * @param settings RuntimeEmailSettings 邮件服务快照
+     */
+    public void replaceEmailSettings(RuntimeEmailSettings settings) {
+        emailSettings.set(settings == null ? RuntimeEmailSettings.defaults() : settings);
+    }
+
+    /**
+     * 普通商户 APIv3 支付配置，使用微信支付公钥验签。
+     * @author zhenglin.cn.cq@gmail.com
+     * @date 2026-11-05 14:00
+     */
+    @lombok.Data
+    public static class Wechat {
+        /** 是否启用微信支付。 */
+        private boolean enabled;
+        /** 已与商户号绑定的公众账号标识。 */
+        private String appId = "";
+        /** 直接收款的普通商户号。 */
+        private String merchantId = "";
+        /** 商户 API 私钥 PEM，仅供服务端签名。 */
+        @lombok.ToString.Exclude
+        private String privateKey = "";
+        /** 商户 API 证书序列号。 */
+        private String merchantSerialNumber = "";
+        /** 微信支付公钥 PEM，与商户 API 私钥分开配置。 */
+        @lombok.ToString.Exclude
+        private String publicKey = "";
+        /** 微信支付公钥 ID，以 PUB_KEY_ID_ 开头，不是商户证书序列号。 */
+        private String publicKeyId = "";
+        /** 用于解密回调的 APIv3 密钥。 */
+        @lombok.ToString.Exclude
+        private String apiV3Key = "";
+        /** 微信可访问且不含查询参数的 HTTPS 支付通知地址。 */
+        private String notifyUrl = "";
+    }
+
+    /**
+     * 获取应用配置
+     *
+     * @return App 应用配置
+     */
+    public App getApp() {
+        return app;
+    }
+
+    /**
+     * 设置应用配置
+     *
+     * @param app App 应用配置
+     */
+    public void setApp(App app) {
+        this.app = app;
+    }
+
+    /**
+     * 获取跨域配置
+     *
+     * @return Cors 跨域配置
+     */
+    public Cors getCors() {
+        return cors;
+    }
+
+    /**
+     * 设置跨域配置
+     *
+     * @param cors Cors 跨域配置
+     */
+    public void setCors(Cors cors) {
+        this.cors = cors;
+    }
+
+    /**
+     * 获取初始管理员配置
+     *
+     * @return Admin 初始管理员配置
+     */
+    public Admin getAdmin() {
+        return admin;
+    }
+
+    /**
+     * 设置初始管理员配置
+     *
+     * @param admin Admin 初始管理员配置
+     */
+    public void setAdmin(Admin admin) {
+        this.admin = admin;
+    }
+
+    /**
+     * 获取AI配置
+     *
+     * @return Ai AI配置
+     */
+    public Ai getAi() {
+        return ai;
+    }
+
+    /**
+     * 设置AI配置
+     *
+     * @param ai Ai AI配置
+     */
+    public void setAi(Ai ai) {
+        this.ai = ai;
+    }
+
+    /**
+     * 获取对象存储配置。
+     *
+     * @return ObjectStorage 对象存储配置
+     */
+    public ObjectStorage getObjectStorage() {
+        return objectStorage;
+    }
+
+    /**
+     * 设置对象存储配置。
+     *
+     * @param objectStorage ObjectStorage 对象存储配置
+     */
+    public void setObjectStorage(ObjectStorage objectStorage) {
+        this.objectStorage = objectStorage;
+    }
+
+    /**
+     * 获取支付宝支付配置。
+     *
+     * @return Alipay 支付宝配置
+     */
+    public Alipay getAlipay() {
+        return alipay;
+    }
+
+    /**
+     * 设置支付宝支付配置。
+     *
+     * @param alipay Alipay 支付宝配置
+     */
+    public void setAlipay(Alipay alipay) {
+        this.alipay = alipay;
+    }
+
+    /** 支付宝电脑网站支付配置。 */
+    public static class Alipay {
+
+        /** 是否启用支付宝支付 */
+        private boolean enabled;
+
+        /** 支付宝应用标识 */
+        private String appId = "";
+
+        /** 应用私钥 */
+        private String privateKey = "";
+
+        /** 支付宝公钥 */
+        private String publicKey = "";
+
+        /** 支付宝网关地址 */
+        private String gatewayUrl = "https://openapi.alipay.com/gateway.do";
+
+        /** 异步通知地址 */
+        private String notifyUrl = "";
+
+        /** 同步跳转地址 */
+        private String returnUrl = "";
+
+        /**
+         * @return boolean 是否启用支付宝支付
+         */
+        public boolean isEnabled() {
+            return enabled;
+        }
+
+        /**
+         * @param enabled boolean 是否启用支付宝支付
+         */
+        public void setEnabled(boolean enabled) {
+            this.enabled = enabled;
+        }
+
+        /**
+         * @return String 支付宝应用标识
+         */
+        public String getAppId() {
+            return appId;
+        }
+
+        /**
+         * @param appId String 支付宝应用标识
+         */
+        public void setAppId(String appId) {
+            this.appId = appId;
+        }
+
+        /**
+         * @return String 应用私钥
+         */
+        public String getPrivateKey() {
+            return privateKey;
+        }
+
+        /**
+         * @param privateKey String 应用私钥
+         */
+        public void setPrivateKey(String privateKey) {
+            this.privateKey = privateKey;
+        }
+
+        /**
+         * @return String 支付宝公钥
+         */
+        public String getPublicKey() {
+            return publicKey;
+        }
+
+        /**
+         * @param publicKey String 支付宝公钥
+         */
+        public void setPublicKey(String publicKey) {
+            this.publicKey = publicKey;
+        }
+
+        /**
+         * @return String 支付宝网关地址
+         */
+        public String getGatewayUrl() {
+            return gatewayUrl;
+        }
+
+        /**
+         * @param gatewayUrl String 支付宝网关地址
+         */
+        public void setGatewayUrl(String gatewayUrl) {
+            this.gatewayUrl = gatewayUrl;
+        }
+
+        /**
+         * @return String 异步通知地址
+         */
+        public String getNotifyUrl() {
+            return notifyUrl;
+        }
+
+        /**
+         * @param notifyUrl String 异步通知地址
+         */
+        public void setNotifyUrl(String notifyUrl) {
+            this.notifyUrl = notifyUrl;
+        }
+
+        /**
+         * @return String 同步跳转地址
+         */
+        public String getReturnUrl() {
+            return returnUrl;
+        }
+
+        /**
+         * @param returnUrl String 同步跳转地址
+         */
+        public void setReturnUrl(String returnUrl) {
+            this.returnUrl = returnUrl;
+        }
+    }
+
+    /**
+     * 应用配置
+     */
+    public static class App {
+
+        /** 应用密钥 */
+        private String secretKey = "";
+
+        /** 前端公开地址 */
+        private String frontendBaseUrl = "";
+
+        /** Token过期小时数 */
+        private int tokenExpireHours = 24;
+
+        /** 可信反向代理地址，多个地址使用英文逗号分隔 */
+        private String trustedProxyAddresses = "";
+
+        /**
+         * 获取密钥
+         *
+         * @return String 密钥
+         */
+        public String getSecretKey() {
+            return secretKey;
+        }
+
+        /**
+         * 设置密钥
+         *
+         * @param secretKey String 密钥
+         */
+        public void setSecretKey(String secretKey) {
+            this.secretKey = secretKey;
+        }
+
+        /**
+         * 获取前端公开地址。
+         *
+         * @return String 前端公开地址
+         */
+        public String getFrontendBaseUrl() {
+            return frontendBaseUrl;
+        }
+
+        /**
+         * 设置前端公开地址。
+         *
+         * @param frontendBaseUrl String 前端公开地址
+         */
+        public void setFrontendBaseUrl(String frontendBaseUrl) {
+            this.frontendBaseUrl = frontendBaseUrl;
+        }
+
+        /**
+         * 获取令牌有效小时数
+         *
+         * @return int 令牌有效小时数
+         */
+        public int getTokenExpireHours() {
+            return tokenExpireHours;
+        }
+
+        /**
+         * 设置令牌有效小时数
+         *
+         * @param tokenExpireHours int 令牌有效小时数
+         */
+        public void setTokenExpireHours(int tokenExpireHours) {
+            this.tokenExpireHours = tokenExpireHours;
+        }
+
+        /**
+         * 获取可信反向代理地址。
+         *
+         * @return String 可信反向代理地址列表
+         */
+        public String getTrustedProxyAddresses() {
+            return trustedProxyAddresses;
+        }
+
+        /**
+         * 设置可信反向代理地址。
+         *
+         * @param trustedProxyAddresses String 可信反向代理地址列表
+         */
+        public void setTrustedProxyAddresses(String trustedProxyAddresses) {
+            this.trustedProxyAddresses = trustedProxyAddresses;
+        }
+    }
+
+    /**
+     * 跨域配置
+     */
+    public static class Cors {
+
+        /** 允许跨域来源规则 */
+        private String allowedOriginPatterns = "http://localhost:5555,http://127.0.0.1:5555,https://www.sceneforge.cn";
+
+        /**
+         * 获取允许的来源匹配表达式
+         *
+         * @return String 允许的来源匹配表达式
+         */
+        public String getAllowedOriginPatterns() {
+            return allowedOriginPatterns;
+        }
+
+        /**
+         * 设置允许的来源匹配表达式
+         *
+         * @param allowedOriginPatterns String 允许的来源匹配表达式
+         */
+        public void setAllowedOriginPatterns(String allowedOriginPatterns) {
+            this.allowedOriginPatterns = allowedOriginPatterns;
+        }
+    }
+
+    /**
+     * 初始管理员配置
+     */
+    public static class Admin {
+
+        /** 初始管理员邮箱 */
+        private String initialEmail = "";
+
+        /** 初始管理员密码 */
+        private String initialPassword = "";
+
+        /** 初始管理员昵称 */
+        private String initialNickname = "管理员";
+
+        /**
+         * 获取初始管理员邮箱
+         *
+         * @return String 初始管理员邮箱
+         */
+        public String getInitialEmail() {
+            return initialEmail;
+        }
+
+        /**
+         * 设置初始管理员邮箱
+         *
+         * @param initialEmail String 初始管理员邮箱
+         */
+        public void setInitialEmail(String initialEmail) {
+            this.initialEmail = initialEmail;
+        }
+
+        /**
+         * 获取初始管理员密码
+         *
+         * @return String 初始管理员密码
+         */
+        public String getInitialPassword() {
+            return initialPassword;
+        }
+
+        /**
+         * 设置初始管理员密码
+         *
+         * @param initialPassword String 初始管理员密码
+         */
+        public void setInitialPassword(String initialPassword) {
+            this.initialPassword = initialPassword;
+        }
+
+        /**
+         * 获取初始管理员昵称
+         *
+         * @return String 初始管理员昵称
+         */
+        public String getInitialNickname() {
+            return initialNickname;
+        }
+
+        /**
+         * 设置初始管理员昵称
+         *
+         * @param initialNickname String 初始管理员昵称
+         */
+        public void setInitialNickname(String initialNickname) {
+            this.initialNickname = initialNickname;
+        }
+    }
+
+    /**
+     * 对象存储配置。
+     */
+    public static class ObjectStorage {
+
+        /** 预签名读地址有效期配置 */
+        @Valid
+        private SignTtl signTtl = new SignTtl();
+
+        /** 是否强制要求存储桶私有，未开启时只记录告警并继续写入私有内容 */
+        private boolean requirePrivateBucket = false;
+
+        /**
+         * 获取是否强制要求存储桶私有。
+         *
+         * @return boolean 是否强制要求存储桶私有
+         */
+        public boolean isRequirePrivateBucket() {
+            return requirePrivateBucket;
+        }
+
+        /**
+         * 设置是否强制要求存储桶私有。
+         *
+         * @param requirePrivateBucket boolean 是否强制要求存储桶私有
+         */
+        public void setRequirePrivateBucket(boolean requirePrivateBucket) {
+            this.requirePrivateBucket = requirePrivateBucket;
+        }
+
+        /** 腾讯云COS配置 */
+        @Valid
+        private TencentCos tencentCos = new TencentCos();
+
+        /**
+         * 获取预签名读地址有效期配置。
+         *
+         * @return SignTtl 预签名读地址有效期配置
+         */
+        public SignTtl getSignTtl() {
+            return signTtl;
+        }
+
+        /**
+         * 设置预签名读地址有效期配置。
+         *
+         * @param signTtl SignTtl 预签名读地址有效期配置
+         */
+        public void setSignTtl(SignTtl signTtl) {
+            this.signTtl = signTtl;
+        }
+
+        /**
+         * 获取腾讯云COS配置。
+         *
+         * @return TencentCos 腾讯云COS配置
+         */
+        public TencentCos getTencentCos() {
+            return tencentCos;
+        }
+
+        /**
+         * 预签名读地址有效期，按用途分档，单位秒。
+         */
+        public static class SignTtl {
+
+            /** 页面预览、图片/视频播放地址有效期 */
+            @Min(value = 1, message = "预览签名有效期必须大于0")
+            private int previewSeconds = 3600;
+
+            /** 文件下载地址有效期 */
+            @Min(value = 1, message = "下载签名有效期必须大于0")
+            private int downloadSeconds = 300;
+
+            /** 第三方模型拉取参考素材的地址有效期 */
+            @Min(value = 1, message = "第三方拉取签名有效期必须大于0")
+            private int thirdPartySeconds = 7200;
+
+            /** 公开分享页展示地址有效期 */
+            @Min(value = 1, message = "公开页签名有效期必须大于0")
+            private int publicPageSeconds = 1800;
+
+            /**
+             * 获取预览签名有效期。
+             *
+             * @return int 预览签名有效期，单位秒
+             */
+            public int getPreviewSeconds() {
+                return previewSeconds;
+            }
+
+            /**
+             * 设置预览签名有效期。
+             *
+             * @param previewSeconds int 预览签名有效期，单位秒
+             */
+            public void setPreviewSeconds(int previewSeconds) {
+                this.previewSeconds = previewSeconds;
+            }
+
+            /**
+             * 获取下载签名有效期。
+             *
+             * @return int 下载签名有效期，单位秒
+             */
+            public int getDownloadSeconds() {
+                return downloadSeconds;
+            }
+
+            /**
+             * 设置下载签名有效期。
+             *
+             * @param downloadSeconds int 下载签名有效期，单位秒
+             */
+            public void setDownloadSeconds(int downloadSeconds) {
+                this.downloadSeconds = downloadSeconds;
+            }
+
+            /**
+             * 获取第三方拉取签名有效期。
+             *
+             * @return int 第三方拉取签名有效期，单位秒
+             */
+            public int getThirdPartySeconds() {
+                return thirdPartySeconds;
+            }
+
+            /**
+             * 设置第三方拉取签名有效期。
+             *
+             * @param thirdPartySeconds int 第三方拉取签名有效期，单位秒
+             */
+            public void setThirdPartySeconds(int thirdPartySeconds) {
+                this.thirdPartySeconds = thirdPartySeconds;
+            }
+
+            /**
+             * 获取公开页签名有效期。
+             *
+             * @return int 公开页签名有效期，单位秒
+             */
+            public int getPublicPageSeconds() {
+                return publicPageSeconds;
+            }
+
+            /**
+             * 设置公开页签名有效期。
+             *
+             * @param publicPageSeconds int 公开页签名有效期，单位秒
+             */
+            public void setPublicPageSeconds(int publicPageSeconds) {
+                this.publicPageSeconds = publicPageSeconds;
+            }
+        }
+
+        /**
+         * 设置腾讯云COS配置。
+         *
+         * @param tencentCos TencentCos 腾讯云COS配置
+         */
+        public void setTencentCos(TencentCos tencentCos) {
+            this.tencentCos = tencentCos;
+        }
+
+        /**
+         * 腾讯云COS客户端配置。
+         */
+        public static class TencentCos {
+
+            /** 单个请求失败后的最大额外重试次数 */
+            @Min(value = 0, message = "腾讯云COS最大重试次数不能小于0")
+            private int maxErrorRetry = 3;
+
+            /**
+             * 获取单个请求失败后的最大额外重试次数。
+             *
+             * @return int 最大额外重试次数
+             */
+            public int getMaxErrorRetry() {
+                return maxErrorRetry;
+            }
+
+            /**
+             * 设置单个请求失败后的最大额外重试次数。
+             *
+             * @param maxErrorRetry int 最大额外重试次数
+             */
+            public void setMaxErrorRetry(int maxErrorRetry) {
+                this.maxErrorRetry = maxErrorRetry;
+            }
+        }
+    }
+
+    /**
+     * 当前进程使用的邮件服务配置。授权码只在内存中保持明文。
+     *
+     * @param smtpHost SMTP 服务地址
+     * @param smtpPort SMTP 端口
+     * @param smtpUsername SMTP 登录用户名
+     * @param smtpPassword SMTP 登录密码或授权码
+     * @param fromEmail 发件人邮箱
+     * @param allowedSuffixes 允许注册的邮箱后缀
+     */
+    public record RuntimeEmailSettings(String smtpHost, int smtpPort, String smtpUsername, String smtpPassword, String fromEmail, String allowedSuffixes) {
+
+        /** 与数据库迁移默认值一致的注册邮箱后缀。 */
+        public static final String DEFAULT_ALLOWED_SUFFIXES = "qq.com,163.com,126.com,gmail.com,outlook.com,hotmail.com,foxmail.com,icloud.com,sina.com,aliyun.com,"
+                + "yeah.net,139.com,189.cn,sina.cn,vip.qq.com,vip.163.com,yahoo.com,live.com,msn.com,proton.me,protonmail.com";
+
+        /**
+         * 空值按未配置处理，避免调用方再判空。
+         *
+         * @param smtpHost SMTP 服务地址
+         * @param smtpPort SMTP 端口
+         * @param smtpUsername SMTP 登录用户名
+         * @param smtpPassword SMTP 登录密码或授权码
+         * @param fromEmail 发件人邮箱
+         * @param allowedSuffixes 允许注册的邮箱后缀
+         */
+        public RuntimeEmailSettings {
+            smtpHost = smtpHost == null ? "" : smtpHost;
+            smtpUsername = smtpUsername == null ? "" : smtpUsername;
+            smtpPassword = smtpPassword == null ? "" : smtpPassword;
+            fromEmail = fromEmail == null ? "" : fromEmail;
+            allowedSuffixes = allowedSuffixes == null ? "" : allowedSuffixes;
+        }
+
+        /**
+         * 与数据库迁移默认值一致的初始快照。
+         *
+         * @return RuntimeEmailSettings 默认邮件配置
+         */
+        public static RuntimeEmailSettings defaults() {
+            return new RuntimeEmailSettings("", 465, "", "", "", DEFAULT_ALLOWED_SUFFIXES);
+        }
+
+        /**
+         * 发信地址和发件人都已填写时，验证码、邀请和群发可以发送。
+         *
+         * @return boolean 邮件服务是否已配置
+         */
+        public boolean configured() {
+            return !smtpHost.isBlank() && !fromEmail.isBlank();
+        }
+
+        /**
+         * 替换 SMTP 服务地址。
+         *
+         * @param smtpHost String SMTP 服务地址
+         * @return RuntimeEmailSettings 新快照
+         */
+        public RuntimeEmailSettings withSmtpHost(String smtpHost) {
+            return new RuntimeEmailSettings(smtpHost, smtpPort, smtpUsername, smtpPassword, fromEmail, allowedSuffixes);
+        }
+
+        /**
+         * 替换发件人邮箱。
+         *
+         * @param fromEmail String 发件人邮箱
+         * @return RuntimeEmailSettings 新快照
+         */
+        public RuntimeEmailSettings withFromEmail(String fromEmail) {
+            return new RuntimeEmailSettings(smtpHost, smtpPort, smtpUsername, smtpPassword, fromEmail, allowedSuffixes);
+        }
+
+        /**
+         * 替换注册邮箱后缀。
+         *
+         * @param allowedSuffixes String 逗号分隔的邮箱后缀
+         * @return RuntimeEmailSettings 新快照
+         */
+        public RuntimeEmailSettings withAllowedSuffixes(String allowedSuffixes) {
+            return new RuntimeEmailSettings(smtpHost, smtpPort, smtpUsername, smtpPassword, fromEmail, allowedSuffixes);
+        }
+
+        /**
+         * 日志只说明授权码是否已设置。
+         *
+         * @return String 不含授权码明文的文本
+         */
+        @Override
+        public String toString() {
+            return "RuntimeEmailSettings[smtpHost=" + smtpHost + ", smtpPort=" + smtpPort + ", smtpUsername=" + smtpUsername
+                    + ", smtpPassword=" + (smtpPassword.isBlank() ? "" : "[已设置]") + ", fromEmail=" + fromEmail
+                    + ", allowedSuffixes=" + allowedSuffixes + "]";
+        }
+    }
+
+    /**
+     * 运行时超时快照，数值来自平台超时设置。
+     *
+     * @param aiRequestBodyTimeoutSeconds AI构造请求体和提取媒体地址的超时秒数
+     * @param storyboardAgentTimeoutSeconds 分镜 Agent 单次调用超时秒数
+     * @param scriptAgentTimeoutSeconds 剧本 Agent 单次调用超时秒数
+     * @param storyBibleAgentTimeoutSeconds 故事知识库 Agent 单次调用超时秒数
+     * @param taskWaitTimeoutSeconds 图片等常规生成任务等待超时秒数
+     * @param videoTaskWaitTimeoutSeconds 视频生成任务等待超时秒数
+     * @param videoCompositionExecutionTimeoutSeconds 视频合成和音频裁剪执行超时秒数
+     * @param tencentCosSocketTimeoutMilliseconds 腾讯云 COS 单次读取超时毫秒数
+     */
+    public record RuntimeTimeouts(int aiRequestBodyTimeoutSeconds, int storyboardAgentTimeoutSeconds, int scriptAgentTimeoutSeconds,
+                                  int storyBibleAgentTimeoutSeconds, int taskWaitTimeoutSeconds, int videoTaskWaitTimeoutSeconds,
+                                  int videoCompositionExecutionTimeoutSeconds, int tencentCosSocketTimeoutMilliseconds) {
+
+        /**
+         * 与数据库迁移默认值一致的初始快照。
+         *
+         * @return RuntimeTimeouts 默认超时
+         */
+        public static RuntimeTimeouts defaults() {
+            return new RuntimeTimeouts(60, 600, 600, 600, 300, 900, 1800, 120_000);
+        }
+    }
+
+    /**
+     * AI服务配置
+     */
+    public static class Ai {
+        /** AI任务队列配置 */
+        private Task task = new Task();
+
+        /** AI系统提示词文件配置 */
+        private SystemPrompt systemPrompt = new SystemPrompt();
+
+        /** 分镜Agent配置 */
+        private StoryboardAgent storyboardAgent = new StoryboardAgent();
+
+        /** 视频合成任务配置 */
+        private VideoComposition videoComposition = new VideoComposition();
+
+        /**
+         * 获取AI任务队列配置。
+         *
+         * @return Task AI任务队列配置
+         */
+        public Task getTask() {
+            return task;
+        }
+
+        /**
+         * 设置AI任务队列配置。
+         *
+         * @param task Task AI任务队列配置
+         */
+        public void setTask(Task task) {
+            this.task = task;
+        }
+
+        /**
+         * 获取AI系统提示词文件配置。
+         *
+         * @return SystemPrompt AI系统提示词文件配置
+         */
+        public SystemPrompt getSystemPrompt() {
+            return systemPrompt;
+        }
+
+        /**
+         * 设置AI系统提示词文件配置。
+         *
+         * @param systemPrompt SystemPrompt AI系统提示词文件配置
+         */
+        public void setSystemPrompt(SystemPrompt systemPrompt) {
+            this.systemPrompt = systemPrompt;
+        }
+
+        /**
+         * 获取分镜Agent配置。
+         *
+         * @return StoryboardAgent 分镜Agent配置
+         */
+        public StoryboardAgent getStoryboardAgent() {
+            return storyboardAgent;
+        }
+
+        /**
+         * 设置分镜Agent配置。
+         *
+         * @param storyboardAgent StoryboardAgent 分镜Agent配置
+         */
+        public void setStoryboardAgent(StoryboardAgent storyboardAgent) {
+            this.storyboardAgent = storyboardAgent;
+        }
+
+        /**
+         * 获取视频合成任务配置。
+         *
+         * @return VideoComposition 视频合成任务配置
+         */
+        public VideoComposition getVideoComposition() {
+            return videoComposition;
+        }
+
+        /**
+         * 设置视频合成任务配置。
+         *
+         * @param videoComposition VideoComposition 视频合成任务配置
+         */
+        public void setVideoComposition(VideoComposition videoComposition) {
+            this.videoComposition = videoComposition;
+        }
+
+        /**
+         * 分镜Agent配置。
+         */
+        public static class StoryboardAgent {
+
+            /** 批量合成镜头提示词时同时请求模型的镜头数量 */
+            private int composeConcurrency = 4;
+
+            /**
+             * 获取批量合成提示词的并发镜头数量。
+             *
+             * @return int 并发数量
+             */
+            public int getComposeConcurrency() {
+                return composeConcurrency;
+            }
+
+            /**
+             * 设置批量合成提示词的并发镜头数量。
+             *
+             * @param composeConcurrency int 并发数量
+             */
+            public void setComposeConcurrency(int composeConcurrency) {
+                this.composeConcurrency = composeConcurrency;
+            }
+        }
+
+        /**
+         * 视频合成任务配置。
+         */
+        public static class VideoComposition {
+
+            /** 全站同时执行的合成任务数量 */
+            private int concurrency = 1;
+
+            /** 单个源视频最大字节数 */
+            private long maximumInputBytes = 524_288_000L;
+
+            /** 单次合成允许的源视频总时长秒数 */
+            private int maximumTotalDurationSeconds = 600;
+
+            /** Redis活动任务租约秒数 */
+            private int activeLeaseSeconds = 180;
+
+            /** Redis活动任务租约续期间隔秒数 */
+            private int leaseRenewSeconds = 60;
+
+            /** FFmpeg可执行文件路径 */
+            private String ffmpegExecutable = "ffmpeg";
+
+            /** FFprobe可执行文件路径 */
+            private String ffprobeExecutable = "ffprobe";
+
+            /**
+             * 获取全站同时执行的合成任务数量。
+             *
+             * @return int 并发数
+             */
+            public int getConcurrency() {
+                return concurrency;
+            }
+
+            /**
+             * 设置全站同时执行的合成任务数量。
+             *
+             * @param concurrency int 并发数
+             */
+            public void setConcurrency(int concurrency) {
+                this.concurrency = concurrency;
+            }
+
+            /**
+             * 获取单个源视频最大字节数。
+             *
+             * @return long 最大字节数
+             */
+            public long getMaximumInputBytes() {
+                return maximumInputBytes;
+            }
+
+            /**
+             * 设置单个源视频最大字节数。
+             *
+             * @param maximumInputBytes long 最大字节数
+             */
+            public void setMaximumInputBytes(long maximumInputBytes) {
+                this.maximumInputBytes = maximumInputBytes;
+            }
+
+            /**
+             * 获取单次合成允许的源视频总时长秒数。
+             *
+             * @return int 最大总时长秒数
+             */
+            public int getMaximumTotalDurationSeconds() {
+                return maximumTotalDurationSeconds;
+            }
+
+            /**
+             * 设置单次合成允许的源视频总时长秒数。
+             *
+             * @param maximumTotalDurationSeconds int 最大总时长秒数
+             */
+            public void setMaximumTotalDurationSeconds(int maximumTotalDurationSeconds) {
+                this.maximumTotalDurationSeconds = maximumTotalDurationSeconds;
+            }
+
+            /**
+             * 获取Redis活动任务租约秒数。
+             *
+             * @return int 租约秒数
+             */
+            public int getActiveLeaseSeconds() {
+                return activeLeaseSeconds;
+            }
+
+            /**
+             * 设置Redis活动任务租约秒数。
+             *
+             * @param activeLeaseSeconds int 租约秒数
+             */
+            public void setActiveLeaseSeconds(int activeLeaseSeconds) {
+                this.activeLeaseSeconds = activeLeaseSeconds;
+            }
+
+            /**
+             * 获取Redis活动任务租约续期间隔秒数。
+             *
+             * @return int 续期间隔秒数
+             */
+            public int getLeaseRenewSeconds() {
+                return leaseRenewSeconds;
+            }
+
+            /**
+             * 设置Redis活动任务租约续期间隔秒数。
+             *
+             * @param leaseRenewSeconds int 续期间隔秒数
+             */
+            public void setLeaseRenewSeconds(int leaseRenewSeconds) {
+                this.leaseRenewSeconds = leaseRenewSeconds;
+            }
+
+            /**
+             * 获取FFmpeg可执行文件路径。
+             *
+             * @return String FFmpeg路径
+             */
+            public String getFfmpegExecutable() {
+                return ffmpegExecutable;
+            }
+
+            /**
+             * 设置FFmpeg可执行文件路径。
+             *
+             * @param ffmpegExecutable String FFmpeg路径
+             */
+            public void setFfmpegExecutable(String ffmpegExecutable) {
+                this.ffmpegExecutable = ffmpegExecutable;
+            }
+
+            /**
+             * 获取FFprobe可执行文件路径。
+             *
+             * @return String FFprobe路径
+             */
+            public String getFfprobeExecutable() {
+                return ffprobeExecutable;
+            }
+
+            /**
+             * 设置FFprobe可执行文件路径。
+             *
+             * @param ffprobeExecutable String FFprobe路径
+             */
+            public void setFfprobeExecutable(String ffprobeExecutable) {
+                this.ffprobeExecutable = ffprobeExecutable;
+            }
+        }
+
+        /**
+         * AI任务队列配置
+         */
+        public static class Task {
+
+            /** Redis Stream键 */
+            private String streamKey = "sceneforge:ai-task:stream";
+
+            /** Redis消费组名称 */
+            private String consumerGroup = "sceneforge-ai-task-consumer";
+
+            /** 同时执行任务数量 */
+            private int consumerConcurrency = 4;
+
+            /** 单次读取消息数量 */
+            private int readBatchSize = 4;
+
+            /** 读取阻塞秒数 */
+            private int readBlockSeconds = 5;
+
+            /** 异步AI任务状态轮询间隔秒数，包括供应商、内部等待和视频合成恢复 */
+            private int pollingIntervalSeconds = 3;
+
+            /** 任务锁TTL秒数 */
+            private int lockTtlSeconds = 300;
+
+            /** 锁续期间隔秒数 */
+            private int lockRenewSeconds = 60;
+
+            /** 未确认消息重新认领空闲秒数 */
+            private int pendingClaimIdleSeconds = 300;
+
+            /** 运行中任务恢复阈值秒数 */
+            private int runningRecoverSeconds = 900;
+
+            /** 图片和视频入口同一用户可同时执行的主Agent请求数 */
+            private int pageRequestConcurrency = 16;
+
+            /**
+             * 获取Redis Stream键。
+             *
+             * @return String Redis Stream键
+             */
+            public String getStreamKey() {
+                return streamKey;
+            }
+
+            /**
+             * 设置Redis Stream键。
+             *
+             * @param streamKey String Redis Stream键
+             */
+            public void setStreamKey(String streamKey) {
+                this.streamKey = streamKey;
+            }
+
+            /**
+             * 获取Redis消费组名称。
+             *
+             * @return String Redis消费组名称
+             */
+            public String getConsumerGroup() {
+                return consumerGroup;
+            }
+
+            /**
+             * 设置Redis消费组名称。
+             *
+             * @param consumerGroup String Redis消费组名称
+             */
+            public void setConsumerGroup(String consumerGroup) {
+                this.consumerGroup = consumerGroup;
+            }
+
+            /**
+             * 获取同时执行任务数量。
+             *
+             * @return int 同时执行任务数量
+             */
+            public int getConsumerConcurrency() {
+                return consumerConcurrency;
+            }
+
+            /**
+             * 设置同时执行任务数量。
+             *
+             * @param consumerConcurrency int 同时执行任务数量
+             */
+            public void setConsumerConcurrency(int consumerConcurrency) {
+                this.consumerConcurrency = consumerConcurrency;
+            }
+
+            /**
+             * 获取单次读取消息数量。
+             *
+             * @return int 单次读取消息数量
+             */
+            public int getReadBatchSize() {
+                return readBatchSize;
+            }
+
+            /**
+             * 设置单次读取消息数量。
+             *
+             * @param readBatchSize int 单次读取消息数量
+             */
+            public void setReadBatchSize(int readBatchSize) {
+                this.readBatchSize = readBatchSize;
+            }
+
+            /**
+             * 获取读取阻塞秒数。
+             *
+             * @return int 读取阻塞秒数
+             */
+            public int getReadBlockSeconds() {
+                return readBlockSeconds;
+            }
+
+            /**
+             * 设置读取阻塞秒数。
+             *
+             * @param readBlockSeconds int 读取阻塞秒数
+             */
+            public void setReadBlockSeconds(int readBlockSeconds) {
+                this.readBlockSeconds = readBlockSeconds;
+            }
+
+            /**
+             * 获取异步AI任务状态轮询间隔秒数。
+             *
+             * @return int 轮询间隔秒数
+             */
+            public int getPollingIntervalSeconds() {
+                return pollingIntervalSeconds;
+            }
+
+            /**
+             * 设置异步AI任务状态轮询间隔秒数。
+             *
+             * @param pollingIntervalSeconds int 轮询间隔秒数
+             */
+            public void setPollingIntervalSeconds(int pollingIntervalSeconds) {
+                this.pollingIntervalSeconds = pollingIntervalSeconds;
+            }
+
+            /**
+             * 获取任务锁TTL秒数。
+             *
+             * @return int 任务锁TTL秒数
+             */
+            public int getLockTtlSeconds() {
+                return lockTtlSeconds;
+            }
+
+            /**
+             * 设置任务锁TTL秒数。
+             *
+             * @param lockTtlSeconds int 任务锁TTL秒数
+             */
+            public void setLockTtlSeconds(int lockTtlSeconds) {
+                this.lockTtlSeconds = lockTtlSeconds;
+            }
+
+            /**
+             * 获取锁续期间隔秒数。
+             *
+             * @return int 锁续期间隔秒数
+             */
+            public int getLockRenewSeconds() {
+                return lockRenewSeconds;
+            }
+
+            /**
+             * 设置锁续期间隔秒数。
+             *
+             * @param lockRenewSeconds int 锁续期间隔秒数
+             */
+            public void setLockRenewSeconds(int lockRenewSeconds) {
+                this.lockRenewSeconds = lockRenewSeconds;
+            }
+
+            /**
+             * 获取未确认消息重新认领空闲秒数。
+             *
+             * @return int 未确认消息重新认领空闲秒数
+             */
+            public int getPendingClaimIdleSeconds() {
+                return pendingClaimIdleSeconds;
+            }
+
+            /**
+             * 设置未确认消息重新认领空闲秒数。
+             *
+             * @param pendingClaimIdleSeconds int 未确认消息重新认领空闲秒数
+             */
+            public void setPendingClaimIdleSeconds(int pendingClaimIdleSeconds) {
+                this.pendingClaimIdleSeconds = pendingClaimIdleSeconds;
+            }
+
+            /**
+             * 获取运行中任务恢复阈值秒数。
+             *
+             * @return int 运行中任务恢复阈值秒数
+             */
+            public int getRunningRecoverSeconds() {
+                return runningRecoverSeconds;
+            }
+
+            /**
+             * 设置运行中任务恢复阈值秒数。
+             *
+             * @param runningRecoverSeconds int 运行中任务恢复阈值秒数
+             */
+            public void setRunningRecoverSeconds(int runningRecoverSeconds) {
+                this.runningRecoverSeconds = runningRecoverSeconds;
+            }
+
+            /**
+             * 获取图片和视频入口同一用户可同时执行的主Agent请求数。
+             *
+             * @return int 并发请求数
+             */
+            public int getPageRequestConcurrency() {
+                return pageRequestConcurrency;
+            }
+
+            /**
+             * 设置图片和视频入口同一用户可同时执行的主Agent请求数。
+             *
+             * @param pageRequestConcurrency int 并发请求数
+             */
+            public void setPageRequestConcurrency(int pageRequestConcurrency) {
+                this.pageRequestConcurrency = pageRequestConcurrency;
+            }
+        }
+
+        /**
+         * AI系统提示词文件配置。
+         */
+        public static class SystemPrompt {
+
+            /** 图片提示词优化文件路径 */
+            private String optimizationImageFile = "";
+
+            /** 视频提示词优化文件路径 */
+            private String optimizationVideoFile = "";
+
+            /** 主Agent文件路径 */
+            private String agentMainFile = "";
+
+            /** 主Agent失败恢复文件路径 */
+            private String agentRecoveryFile = "";
+
+            /** 图片生成Agent文件路径 */
+            private String agentImageFile = "";
+
+            /** 视频生成Agent文件路径 */
+            private String agentVideoFile = "";
+
+            /** 画布Agent文件路径 */
+            private String agentCanvasFile = "";
+
+            /** 分镜脚本Agent文件路径 */
+            private String agentStoryboardFile = "";
+
+            /** 剧本创作Agent文件路径 */
+            private String agentScriptFile = "";
+
+            /** 故事知识库分析Agent文件路径 */
+            private String agentStoryBibleFile = "";
+
+            /** 用户动作标识清单文件路径 */
+            private String agentUserActionsFile = "";
+
+            /** 分镜资产图片提示词模板文件路径 */
+            private String imageStoryboardAssetFile = "";
+
+            /**
+             * 获取图片提示词优化文件路径。
+             *
+             * @return String 图片提示词优化文件路径
+             */
+            public String getOptimizationImageFile() {
+                return optimizationImageFile;
+            }
+
+            /**
+             * 设置图片提示词优化文件路径。
+             *
+             * @param optimizationImageFile String 图片提示词优化文件路径
+             */
+            public void setOptimizationImageFile(String optimizationImageFile) {
+                this.optimizationImageFile = optimizationImageFile;
+            }
+
+            /**
+             * 获取视频提示词优化文件路径。
+             *
+             * @return String 视频提示词优化文件路径
+             */
+            public String getOptimizationVideoFile() {
+                return optimizationVideoFile;
+            }
+
+            /**
+             * 设置视频提示词优化文件路径。
+             *
+             * @param optimizationVideoFile String 视频提示词优化文件路径
+             */
+            public void setOptimizationVideoFile(String optimizationVideoFile) {
+                this.optimizationVideoFile = optimizationVideoFile;
+            }
+
+            /**
+             * 获取主Agent文件路径。
+             *
+             * @return String 主Agent文件路径
+             */
+            public String getAgentMainFile() {
+                return agentMainFile;
+            }
+
+            /**
+             * 设置主Agent文件路径。
+             *
+             * @param agentMainFile String 主Agent文件路径
+             */
+            public void setAgentMainFile(String agentMainFile) {
+                this.agentMainFile = agentMainFile;
+            }
+
+            /**
+             * 获取主Agent失败恢复文件路径。
+             *
+             * @return String 主Agent失败恢复文件路径
+             */
+            public String getAgentRecoveryFile() {
+                return agentRecoveryFile;
+            }
+
+            /**
+             * 设置主Agent失败恢复文件路径。
+             *
+             * @param agentRecoveryFile String 主Agent失败恢复文件路径
+             */
+            public void setAgentRecoveryFile(String agentRecoveryFile) {
+                this.agentRecoveryFile = agentRecoveryFile;
+            }
+
+            /**
+             * 获取图片生成Agent文件路径。
+             *
+             * @return String 图片生成Agent文件路径
+             */
+            public String getAgentImageFile() {
+                return agentImageFile;
+            }
+
+            /**
+             * 设置图片生成Agent文件路径。
+             *
+             * @param agentImageFile String 图片生成Agent文件路径
+             */
+            public void setAgentImageFile(String agentImageFile) {
+                this.agentImageFile = agentImageFile;
+            }
+
+            /**
+             * 获取视频生成Agent文件路径。
+             *
+             * @return String 视频生成Agent文件路径
+             */
+            public String getAgentVideoFile() {
+                return agentVideoFile;
+            }
+
+            /**
+             * 设置视频生成Agent文件路径。
+             *
+             * @param agentVideoFile String 视频生成Agent文件路径
+             */
+            public void setAgentVideoFile(String agentVideoFile) {
+                this.agentVideoFile = agentVideoFile;
+            }
+
+            /**
+             * 获取画布Agent文件路径。
+             *
+             * @return String 画布Agent文件路径
+             */
+            public String getAgentCanvasFile() {
+                return agentCanvasFile;
+            }
+
+            /**
+             * 设置画布Agent文件路径。
+             *
+             * @param agentCanvasFile String 画布Agent文件路径
+             */
+            public void setAgentCanvasFile(String agentCanvasFile) {
+                this.agentCanvasFile = agentCanvasFile;
+            }
+
+            /**
+             * 获取分镜脚本Agent文件路径。
+             *
+             * @return String 分镜脚本Agent文件路径
+             */
+            public String getAgentStoryboardFile() {
+                return agentStoryboardFile;
+            }
+
+            /**
+             * 设置分镜脚本Agent文件路径。
+             *
+             * @param agentStoryboardFile String 分镜脚本Agent文件路径
+             */
+            public void setAgentStoryboardFile(String agentStoryboardFile) {
+                this.agentStoryboardFile = agentStoryboardFile;
+            }
+
+            /**
+             * 获取剧本创作Agent文件路径。
+             *
+             * @return String 剧本创作Agent文件路径
+             */
+            public String getAgentScriptFile() {
+                return agentScriptFile;
+            }
+
+            /**
+             * 设置剧本创作Agent文件路径。
+             *
+             * @param agentScriptFile String 剧本创作Agent文件路径
+             */
+            public void setAgentScriptFile(String agentScriptFile) {
+                this.agentScriptFile = agentScriptFile;
+            }
+
+            /**
+             * 获取故事知识库分析Agent文件路径。
+             *
+             * @return String 故事知识库分析Agent文件路径
+             */
+            public String getAgentStoryBibleFile() {
+                return agentStoryBibleFile;
+            }
+
+            /**
+             * 设置故事知识库分析Agent文件路径。
+             *
+             * @param agentStoryBibleFile String 故事知识库分析Agent文件路径
+             */
+            public void setAgentStoryBibleFile(String agentStoryBibleFile) {
+                this.agentStoryBibleFile = agentStoryBibleFile;
+            }
+
+            /**
+             * 获取用户动作标识清单文件路径。
+             *
+             * @return String 用户动作标识清单文件路径
+             */
+            public String getAgentUserActionsFile() {
+                return agentUserActionsFile;
+            }
+
+            /**
+             * 设置用户动作标识清单文件路径。
+             *
+             * @param agentUserActionsFile String 用户动作标识清单文件路径
+             */
+            public void setAgentUserActionsFile(String agentUserActionsFile) {
+                this.agentUserActionsFile = agentUserActionsFile;
+            }
+
+            /**
+             * 获取分镜资产图片提示词模板文件路径。
+             *
+             * @return String 分镜资产图片提示词模板文件路径
+             */
+            public String getImageStoryboardAssetFile() {
+                return imageStoryboardAssetFile;
+            }
+
+            /**
+             * 设置分镜资产图片提示词模板文件路径。
+             *
+             * @param imageStoryboardAssetFile String 分镜资产图片提示词模板文件路径
+             */
+            public void setImageStoryboardAssetFile(String imageStoryboardAssetFile) {
+                this.imageStoryboardAssetFile = imageStoryboardAssetFile;
+            }
+
+        }
+    }
+}

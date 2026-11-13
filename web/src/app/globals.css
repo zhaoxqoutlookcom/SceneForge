@@ -3,7 +3,7 @@
 @import "shadcn/tailwind.css";
 
 @font-face {
-    font-family: "Novanova Bricolage";
+    font-family: "SceneForge Bricolage";
     src: url("/fonts/bricolage-grotesque-latin-wght-normal.woff2") format("woff2");
     font-display: swap;
     font-style: normal;
@@ -20,7 +20,7 @@
 }
 
 @font-face {
-    font-family: "Novanova Syne";
+    font-family: "SceneForge Syne";
     src: url("/fonts/syne-latin-wght-normal.woff2") format("woff2");
     font-display: swap;
     font-style: normal;
@@ -72,8 +72,8 @@
 
 :root {
     --radius: 0.625rem;
-    --studio-interface-font: "Novanova Bricolage", "SF Pro Display", "PingFang SC", "Microsoft YaHei", sans-serif;
-    --studio-wordmark-font: "Novanova Syne", "Arial Black", "SF Pro Display", sans-serif;
+    --studio-interface-font: "SceneForge Bricolage", "SF Pro Display", "PingFang SC", "Microsoft YaHei", sans-serif;
+    --studio-wordmark-font: "SceneForge Syne", "Arial Black", "SF Pro Display", sans-serif;
     --background: oklch(0.975 0.013 295.3);
     --foreground: oklch(0.208 0.04 265.8);
     --border: oklch(0.894 0.055 293.3);

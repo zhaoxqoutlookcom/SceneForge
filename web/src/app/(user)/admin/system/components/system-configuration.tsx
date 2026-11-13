@@ -1487,7 +1487,7 @@ export function SystemConfiguration({ activeTab: controlledActiveTab, onTabChang
                                                                 />
                                                             </Form.Item>
                                                             <Form.Item label={translate("appShell.storageDirectory")} extra={translate("appShell.uploadKeyDirectoryImagesOrVideosDateFilename")} className="mb-0">
-                                                                <Input value={storage.directory} placeholder="novanova-studio" disabled={isSaving} onChange={(event) => updateDraftObjectStorage(storage.id, { directory: event.target.value })} />
+                                                                <Input value={storage.directory} placeholder="sceneforge" disabled={isSaving} onChange={(event) => updateDraftObjectStorage(storage.id, { directory: event.target.value })} />
                                                             </Form.Item>
                                                             <Form.Item label={providerFields.accessKeyLabel} className="mb-0">
                                                                 <Input value={storage.accessKey} autoComplete="off" disabled={isSaving} onChange={(event) => updateDraftObjectStorage(storage.id, { accessKey: event.target.value })} />
@@ -2591,5 +2591,5 @@ function formatTimestamp(value: string) {
 }
 
 function isDefaultObjectStoragePlaceholder(storage: ObjectStorageConfig | undefined) {
-    return storage?.id === "default" && storage.name === "默认对象存储" && storage.directory === "novanova-studio" && !storage.accessKey && !storage.secretKey && !storage.bucket && !storage.region && !storage.endpoint && !storage.publicBaseUrl;
+    return storage?.id === "default" && storage.name === "默认对象存储" && storage.directory === "sceneforge" && !storage.accessKey && !storage.secretKey && !storage.bucket && !storage.region && !storage.endpoint && !storage.publicBaseUrl;
 }

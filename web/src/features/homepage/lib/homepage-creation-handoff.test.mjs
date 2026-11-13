@@ -53,7 +53,7 @@ test("首页创作草稿只在目标页面读取，并在确认开始后删除",
 
 test("损坏草稿和本地临时地址不会被当成可生成内容", () => {
     installStorage();
-    sessionStorage.setItem("novanova:homepage-creation-handoff", "{");
+    sessionStorage.setItem("sceneforge:homepage-creation-handoff", "{");
     assert.equal(peekHomepageCreationHandoff("image"), null);
     assert.equal(parseHomepageCreationDraft({ target: "image", prompt: "   ", images: [] }), null);
     assert.equal(parseHomepageCreationDraft({ target: "image", prompt: "海报", images: [{ id: "1", name: "a", type: "image/png", dataUrl: "blob:x" }] })?.images.length, 0);

@@ -1,6 +1,6 @@
 # Docker 完整部署指南
 
-本文档介绍如何使用 Docker Compose 一键部署 Novanova Studio 的全部服务（PostgreSQL、Redis、后端、前端、Nginx）。
+本文档介绍如何使用 Docker Compose 一键部署 SceneForge 的全部服务（PostgreSQL、Redis、后端、前端、Nginx）。
 
 默认 `local` 配置档使用仓库内 Nginx 配置和桥接网络。`production` 配置档使用 Linux 宿主机的 HTTPS 配置及证书。两种配置均只使用 `docker-compose.yml`。
 
@@ -16,8 +16,8 @@
 ## 2. 获取源码与配置环境变量
 
 ```bash
-git clone <仓库地址> novanova-studio
-cd novanova-studio
+git clone <仓库地址> sceneforge
+cd sceneforge
 ```
 
 创建 `.env` 并从样例复制：

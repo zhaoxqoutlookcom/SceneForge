@@ -71,7 +71,7 @@ const CANVAS_EDGE_FLOW_DASH = "0.08 0.2533 0.08 0.2533 0.08 0.2534";
 const CANVAS_PAN_ON_DRAG = [0, 1, 2];
 const CANVAS_SELECTION_KEY_CODES = ["Control", "Meta"];
 const CANVAS_PRO_OPTIONS = { hideAttribution: true };
-const CANVAS_MINIMAP_VISIBLE_STORAGE_KEY = "novanova:canvas:minimap_visible";
+const CANVAS_MINIMAP_VISIBLE_STORAGE_KEY = "sceneforge:canvas:minimap_visible";
 const CANVAS_CONNECTION_HANDLE_RADIUS = CANVAS_CONNECTION_HANDLE_SIZE / 2;
 
 const canvasEdgeTypes: EdgeTypes = { canvasConnection: CanvasConnectionEdge };

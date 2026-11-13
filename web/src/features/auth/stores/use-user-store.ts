@@ -6,7 +6,7 @@ import { create } from "zustand";
 import { authenticationPath } from "@/features/auth/lib/authentication-path";
 import { parseSpacePath } from "@/features/team/space-path";
 
-const USER_SESSION_KEY = "novanova:user_session:v1";
+const USER_SESSION_KEY = "sceneforge:user_session:v1";
 
 export type ServerUserRole = "user" | "admin";
 

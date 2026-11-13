@@ -12,7 +12,7 @@ export type ShotGenerationLastUsedSettings = {
 };
 
 const storage = localforage.createInstance({
-    name: "novanova-studio",
+    name: "sceneforge",
     storeName: "comic_drama_shot_generation_settings",
 });
 
