@@ -1,0 +1,238 @@
+"use client";
+import { useInsufficientCreditsPrompt } from "@/features/credits/use-insufficient-credits-prompt";
+import { modelCreditBalance } from "@/features/team/credit-balance";
+import { useTranslation } from "@/features/locale/use-translation";
+
+
+import { memo, useEffect, useRef, useState, type CompositionEvent, type KeyboardEvent, type MouseEvent } from "react";
+import { Clapperboard, ExternalLink, LoaderCircle, RefreshCw } from "lucide-react";
+import { App } from "antd";
+import { NodeResizer, type NodeProps } from "@xyflow/react";
+
+import { ModelPicker } from "@/features/settings/components/model-picker";
+import { useEffectiveConfig } from "@/features/settings/stores/use-config-store";
+import type { CanvasStoryboardNode } from "../types";
+import { readStoryboardModelCost } from "../domain/storyboard";
+import { useNodeActions } from "./node-action-context";
+import { CanvasConnectionHandles, CanvasNodeTitle, NodeHoverSurface } from "./shared";
+import { useCanvasTheme } from "../components/canvas-theme-provider";
+
+export const StoryboardNode = memo(function StoryboardNode({ data: rawData, selected }: NodeProps) {
+    const translate = useTranslation();
+    const data = rawData as unknown as CanvasStoryboardNode;
+    const actions = useNodeActions();
+    const { modal } = App.useApp();
+    const theme = useCanvasTheme();
+    const config = useEffectiveConfig();
+    const [instructionDraft, setInstructionDraft] = useState(data.content.instruction);
+    const [visualStyleDraft, setVisualStyleDraft] = useState(data.content.visualStyle ?? "");
+    const isInstructionComposingRef = useRef(false);
+    const isVisualStyleComposingRef = useRef(false);
+    const generated = data.storyboard.shots.length > 0;
+    const running = data.execution.phase === "running";
+    const failed = data.execution.phase === "failed";
+    const model = data.content.model || config.textModel;
+    const creditCost = readStoryboardModelCost(config.modelCosts, model);
+    useInsufficientCreditsPrompt({ enabled: !!selected && !running && config.modelCosts.some((item) => item.model === model && item.taskType === "text"), requiredCredits: creditCost, availableCredits: modelCreditBalance(model), contextKey: data.id });
+    const statusText = running ? translate("canvas.processing_694b71") : generated ? translate("canvas.generated") : failed ? translate("canvas.operationFailed") : translate("canvas.notGenerated");
+    const statusColor = running || generated ? theme.node.activeStroke : failed ? "var(--studio-danger)" : theme.node.muted;
+    const creditLabel = translate("canvas.credits_5c15b9", { value0: generated ? translate("canvas.regenerate") : translate("canvas.firstGeneration"), value1: creditCost });
+
+    useEffect(() => {
+        if (!isInstructionComposingRef.current) setInstructionDraft(data.content.instruction);
+    }, [data.id, data.content.instruction]);
+
+    useEffect(() => {
+        if (!isVisualStyleComposingRef.current) setVisualStyleDraft(data.content.visualStyle ?? "");
+    }, [data.id, data.content.visualStyle]);
+
+    const handleInstructionChange = (value: string) => {
+        setInstructionDraft(value);
+        actions.onStoryboardInstructionChange?.(data.id, value);
+    };
+
+    const handleVisualStyleChange = (value: string) => {
+        setVisualStyleDraft(value);
+        actions.onStoryboardVisualStyleChange?.(data.id, value);
+    };
+
+    const handleCompositionStart = (_event: CompositionEvent<HTMLTextAreaElement>) => {
+        isInstructionComposingRef.current = true;
+    };
+
+    const handleCompositionEnd = (event: CompositionEvent<HTMLTextAreaElement>) => {
+        isInstructionComposingRef.current = false;
+        handleInstructionChange(event.currentTarget.value);
+    };
+
+    const handleVisualStyleCompositionStart = (_event: CompositionEvent<HTMLTextAreaElement>) => {
+        isVisualStyleComposingRef.current = true;
+    };
+
+    const handleVisualStyleCompositionEnd = (event: CompositionEvent<HTMLTextAreaElement>) => {
+        isVisualStyleComposingRef.current = false;
+        handleVisualStyleChange(event.currentTarget.value);
+    };
+
+    const stopCanvasKeyboardEvent = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+        event.stopPropagation();
+    };
+
+    const requestStoryboardGeneration = (event: MouseEvent<HTMLButtonElement>) => {
+        event.stopPropagation();
+        if (!generated) {
+            actions.onGenerateStoryboard?.(data);
+            return;
+        }
+        modal.confirm({
+            title: translate("canvas.regenerateStoryboard"),
+            content: translate("canvas.regeneratingWillReplaceTheCurrentShotsAssetsAndComposed"),
+            okText: translate("canvas.regenerate"),
+            cancelText: translate("canvas.cancel"),
+            okButtonProps: { danger: true },
+            onOk: () => actions.onGenerateStoryboard?.(data),
+        });
+    };
+
+    return (
+        <>
+            <NodeResizer
+                minWidth={280}
+                minHeight={320}
+                isVisible={selected}
+                lineStyle={{ borderColor: theme.node.activeStroke }}
+                handleStyle={{ borderColor: theme.node.activeStroke, backgroundColor: theme.node.panel }}
+                onResizeEnd={(_, params) => actions.onResize?.(data.id, params.width, params.height, { x: params.x, y: params.y })}
+            />
+            <NodeHoverSurface
+                nodeId={data.id}
+                className="relative flex select-none flex-col overflow-visible rounded-lg border"
+                style={{
+                    width: "100%",
+                    height: "100%",
+                    background: theme.node.panel,
+                    borderColor: selected ? theme.node.activeStroke : theme.node.stroke,
+                    boxShadow: selected ? `0 0 0 1px ${theme.node.activeStroke}55` : undefined,
+                }}
+            >
+                <CanvasNodeTitle nodeId={data.id} title={data.title} defaultTitle={translate("canvas.storyboardScript")} onTitleChange={actions.onTitleChange} />
+                <div className="flex items-center gap-2 border-b px-3 py-2.5" style={{ borderColor: theme.node.stroke }}>
+                    <Clapperboard className="size-4" style={{ color: theme.node.activeStroke }} />
+                    <span className="text-sm font-medium" style={{ color: theme.node.text }}>
+                        {translate("canvas.storyboardScript")}</span>
+                    <span className="ml-auto flex items-center gap-1 text-[11px]" style={{ color: statusColor }}>
+                        {running ? <LoaderCircle className="size-3.5 animate-spin" /> : null}
+                        {statusText}
+                    </span>
+                </div>
+                <div className="min-h-0 flex flex-1 flex-col gap-3 overflow-auto px-3 py-3">
+                    <label className="block space-y-1.5">
+                        <span className="block text-[11px] font-medium" style={{ color: theme.node.muted }}>
+                            {translate("canvas.shotDescription")}</span>
+                        <textarea
+                            rows={generated ? 2 : 4}
+                            className={`nodrag nopan nowheel block w-full resize-none select-text rounded-md border p-2 text-xs leading-5 outline-none transition focus:ring-2 ${generated ? "min-h-[52px] max-h-24" : "min-h-24"}`}
+                            style={{ color: theme.node.text, background: theme.node.fill, borderColor: theme.node.stroke, caretColor: theme.node.text }}
+                            placeholder={translate("canvas.describeScriptSectionShotCountPacingAndEmphasisEnter")}
+                            value={instructionDraft}
+                            disabled={running}
+                            onChange={(event) => handleInstructionChange(event.target.value)}
+                            onCompositionStart={handleCompositionStart}
+                            onCompositionEnd={handleCompositionEnd}
+                            onKeyDown={stopCanvasKeyboardEvent}
+                            onKeyUp={stopCanvasKeyboardEvent}
+                            onMouseDown={(event) => event.stopPropagation()}
+                            onPointerDown={(event) => event.stopPropagation()}
+                            onWheel={(event) => event.stopPropagation()}
+                        />
+                    </label>
+                    <label className="block space-y-1.5">
+                        <span className="block text-[11px] font-medium" style={{ color: theme.node.muted }}>
+                            {translate("canvas.visualStyle")}</span>
+                        <textarea
+                            rows={generated ? 2 : 3}
+                            className={`nodrag nopan nowheel block w-full resize-none select-text rounded-md border p-2 text-xs leading-5 outline-none transition focus:ring-2 ${generated ? "min-h-[52px] max-h-24" : "min-h-[72px]"}`}
+                            style={{ color: theme.node.text, background: theme.node.fill, borderColor: theme.node.stroke, caretColor: theme.node.text }}
+                            placeholder={translate("canvas.eGChineseAnimeKoreanComicPainterlyCinematic")}
+                            value={visualStyleDraft}
+                            disabled={running}
+                            onChange={(event) => handleVisualStyleChange(event.target.value)}
+                            onCompositionStart={handleVisualStyleCompositionStart}
+                            onCompositionEnd={handleVisualStyleCompositionEnd}
+                            onKeyDown={stopCanvasKeyboardEvent}
+                            onKeyUp={stopCanvasKeyboardEvent}
+                            onMouseDown={(event) => event.stopPropagation()}
+                            onPointerDown={(event) => event.stopPropagation()}
+                            onWheel={(event) => event.stopPropagation()}
+                        />
+                    </label>
+                    <div className="flex min-w-0 items-center gap-2 border-b pb-2" style={{ borderColor: theme.node.stroke }}>
+                        <span className="shrink-0 text-[11px]" style={{ color: theme.node.muted }}>
+                            {translate("canvas.model")}</span>
+                        <ModelPicker
+                            config={config}
+                            value={model}
+                            capability="text"
+                            className="!h-7 !min-w-0 !flex-1 !rounded-md"
+                            placeholder={translate("canvas.selectTextModel")}
+                            onChange={(value) => actions.onStoryboardModelChange?.(data.id, value)}
+                            onMissingConfig={actions.onMissingTextModelConfig}
+                        />
+                        <span className="shrink-0 text-[11px] tabular-nums" style={{ color: theme.node.muted }}>
+                            {creditLabel}
+                        </span>
+                    </div>
+                    {failed && data.execution.errorMessage ? (
+                        <p className="text-xs leading-5" style={{ color: "var(--studio-danger)" }}>
+                            {data.execution.errorMessage}
+                        </p>
+                    ) : null}
+                    {generated ? (
+                        <dl className="mt-auto grid grid-cols-2 overflow-hidden rounded-md border" style={{ background: theme.node.fill, borderColor: theme.node.stroke }}>
+                            <div className="flex items-center justify-between gap-2 px-3 py-2">
+                                <dt className="text-[11px]" style={{ color: theme.node.muted }}>
+                                    {translate("canvas.shot")}</dt>
+                                <dd className="text-lg font-semibold tabular-nums" style={{ color: theme.node.text }}>
+                                    {data.storyboard.shots.length}
+                                </dd>
+                            </div>
+                            <div className="flex items-center justify-between gap-2 border-l px-3 py-2" style={{ borderColor: theme.node.stroke }}>
+                                <dt className="text-[11px]" style={{ color: theme.node.muted }}>
+                                    {translate("canvas.assets")}</dt>
+                                <dd className="text-lg font-semibold tabular-nums" style={{ color: theme.node.text }}>
+                                    {data.storyboard.assets.length}
+                                </dd>
+                            </div>
+                        </dl>
+                    ) : null}
+                </div>
+                <div className="grid gap-2 border-t px-3 py-3" style={{ borderColor: theme.node.stroke }}>
+                    {generated ? (
+                        <button
+                            type="button"
+                            className="nodrag nopan flex w-full items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-[filter,transform] duration-150 hover:brightness-95 active:translate-y-px motion-reduce:transition-none"
+                            style={{ background: theme.node.activeStroke, color: theme.node.panel }}
+                            onClick={(event) => {
+                                event.stopPropagation();
+                                actions.onOpenStoryboard(data);
+                            }}
+                        >
+                            <ExternalLink className="size-4" />
+                            {translate("canvas.openStoryboard")}</button>
+                    ) : null}
+                    <button
+                        type="button"
+                        className="nodrag nopan flex w-full items-center justify-center gap-2 rounded-md border px-3 py-2 text-sm font-medium transition-[filter,transform,opacity] duration-150 hover:opacity-80 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transition-none"
+                        style={{ background: generated ? "transparent" : theme.node.activeStroke, color: generated ? theme.node.text : theme.node.panel, borderColor: generated ? theme.node.stroke : theme.node.activeStroke }}
+                        disabled={running}
+                        onClick={requestStoryboardGeneration}
+                    >
+                        {running ? <LoaderCircle className="size-4 animate-spin" /> : generated ? <RefreshCw className="size-4" /> : <Clapperboard className="size-4" />}
+                        {running ? translate("canvas.generatingStoryboard") : generated ? translate("canvas.regenerateStoryboard") : translate("canvas.generate_59dd45")}
+                    </button>
+                </div>
+                <CanvasConnectionHandles />
+            </NodeHoverSurface>
+        </>
+    );
+});

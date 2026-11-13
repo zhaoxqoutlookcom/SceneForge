@@ -1,0 +1,4 @@
+target
+logs
+.maven-repository
+config/wechatpay/

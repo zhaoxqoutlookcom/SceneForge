@@ -1,0 +1,67 @@
+"use client";
+import { useTranslation } from "@/features/locale/use-translation";
+
+
+import type { ReactNode } from "react";
+import { useEffect } from "react";
+import { LoaderCircle } from "lucide-react";
+import { usePathname, useRouter } from "@/shared/lib/team-navigation";
+
+import { AppShell } from "@/features/app-shell/components/app-shell";
+import { safeAuthRedirect } from "@/features/auth/lib/oauth2-login";
+import { useUserStore } from "@/features/auth/stores/use-user-store";
+import { useTeamStore } from "@/features/team/stores/use-team-store";
+
+export default function UserLayout({ children }: { children: ReactNode }) {
+    const router = useRouter();
+    const pathname = usePathname();
+    const hydrated = useUserStore((state) => state.hydrated);
+    const hydrateSession = useUserStore((state) => state.hydrateSession);
+    const user = useUserStore((state) => state.user);
+    const team = useTeamStore((state) => state.team);
+    const openAuthModal = useUserStore((state) => state.openAuthModal);
+    const publicPath = pathname === "/" || pathname === "/editions" || /^\/share\/[^/]+\/?$/.test(pathname);
+
+    useEffect(() => {
+        hydrateSession();
+    }, [hydrateSession]);
+
+    /* 未登录时访问非公开路由 → 回首页并附加 redirect 参数 */
+    useEffect(() => {
+        if (!hydrated || user || publicPath) return;
+        const target = typeof window === "undefined" ? pathname : `${window.location.pathname}${window.location.search}`;
+        if (team) { openAuthModal(target); return; }
+        router.replace(`/?redirect=${encodeURIComponent(target)}`);
+    }, [hydrated, openAuthModal, pathname, publicPath, router, team, user]);
+
+    /* 首页检测 ?redirect= 参数 → 弹登录窗 */
+    useEffect(() => {
+        if (!hydrated || user || pathname !== "/") return;
+        const params = new URLSearchParams(window.location.search);
+        const redirect = params.get("redirect");
+        if (redirect && safeAuthRedirect(redirect) !== "/") {
+            openAuthModal(redirect);
+        }
+    }, [hydrated, user, pathname, openAuthModal]);
+
+    /* hydration 未完成 → loading */
+    if (!hydrated) {
+        return <UserLoadingFallback />;
+    }
+
+    /* 未登录 + 非公开页面（正在重定向中）→ loading */
+    if (!user && !publicPath) {
+        return <UserLoadingFallback />;
+    }
+
+    return <AppShell>{children}</AppShell>;
+}
+
+function UserLoadingFallback() {
+    const translate = useTranslation();
+    return (
+        <div className="studio-shell-bg flex h-dvh items-center justify-center text-[var(--studio-muted)]" role="status" aria-label={translate("layout.loading")}>
+            <LoaderCircle className="size-7 animate-spin" aria-hidden="true" />
+        </div>
+    );
+}

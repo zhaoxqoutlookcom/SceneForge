@@ -1,0 +1,90 @@
+"use client";
+import { useTranslation } from "@/features/locale/use-translation";
+
+
+import { memo, useState } from "react";
+import { NodeResizer, type NodeProps, type Node } from "@xyflow/react";
+import { Play, Video } from "lucide-react";
+import type { CanvasVideoNode } from "../types";
+import { useNodeActions } from "./node-action-context";
+import { CanvasConnectionHandles, CanvasNodeTitle, NodeError, NodeHoverSurface, NodeLoading, NodeMediaUnavailable } from "./shared";
+import { useCanvasTheme } from "../components/canvas-theme-provider";
+import { useMediaUrl } from "@/shared/hooks/use-media-url";
+
+export const VideoNode = memo(function VideoNode({ data, selected }: NodeProps<Node<CanvasVideoNode>>) {
+    const translate = useTranslation();
+    const actions = useNodeActions();
+    const theme = useCanvasTheme();
+    const hasContent = Boolean(data.content.source);
+    const isLoading = data.execution.phase === "running";
+    const isError = data.execution.phase === "failed";
+    const [hovered, setHovered] = useState(false);
+    // 记录加载失败的媒体地址，地址变化（重新生成/替换）后自动恢复显示。
+    const [failedSource, setFailedSource] = useState<string | null>(null);
+    // 有存储键时通过接口换取当前临时地址，地址过期后由渲染错误触发续签。
+    const media = useMediaUrl({ storageKey: data.content.storageKey, url: data.content.source, objectStorage: data.content.objectStorage, kind: "media" });
+    const displaySource = media.url || data.content.source;
+    const isMediaUnavailable = hasContent && (failedSource === data.content.source || (Boolean(data.content.storageKey) && media.failed));
+    const borderColor = selected ? theme.node.activeStroke : isError ? "#ef4444" : theme.node.stroke;
+
+    return (
+        <>
+            <NodeResizer
+                minWidth={220}
+                minHeight={160}
+                keepAspectRatio
+                isVisible={selected}
+                lineStyle={{ borderColor: theme.node.activeStroke }}
+                handleStyle={{ borderColor: theme.node.activeStroke, backgroundColor: theme.node.panel }}
+                onResizeEnd={(_, params) => {
+                    actions.onResize?.(data.id, params.width, params.height, { x: params.x, y: params.y });
+                }}
+            />
+            <NodeHoverSurface
+                nodeId={data.id}
+                className="relative flex select-none flex-col rounded-3xl border-2"
+                style={{
+                    width: "100%",
+                    height: "100%",
+                    background: hasContent && !isMediaUnavailable ? theme.canvas.background : theme.node.fill,
+                    borderColor,
+                    boxShadow: selected ? `0 0 0 1px ${theme.node.activeStroke}55` : undefined,
+                }}
+                onMouseEnter={() => setHovered(true)}
+                onMouseLeave={() => setHovered(false)}
+            >
+                <CanvasNodeTitle nodeId={data.id} title={data.title} defaultTitle={translate("canvas.video")} onTitleChange={actions.onTitleChange} />
+                {isLoading ? (
+                    <NodeLoading />
+                ) : isError ? (
+                    <NodeError node={data} />
+                ) : isMediaUnavailable ? (
+                    <NodeMediaUnavailable kind="video" />
+                ) : hasContent ? (
+                    <div className="relative h-full min-h-0 w-full min-w-0 overflow-hidden rounded-[inherit]">
+                        <video src={displaySource} className="pointer-events-none block h-full w-full object-contain" data-canvas-no-zoom muted preload="metadata" onError={() => { if (data.content.storageKey) media.onError(); else setFailedSource(data.content.source); }} />
+                        {hovered ? (
+                            <div className="pointer-events-auto absolute inset-0 flex items-center justify-center" style={{ background: "rgba(2,6,23,0.22)" }}>
+                                <button
+                                    type="button"
+                                    className="flex h-14 w-14 items-center justify-center rounded-full shadow-lg transition hover:scale-105"
+                                    style={{ background: theme.node.panel, color: theme.node.text }}
+                                    onClick={() => actions.onViewVideo(data)}
+                                    aria-label={translate("canvas.playEnlargedVideo")}
+                                >
+                                    <Play className="size-7 ml-0.5" />
+                                </button>
+                            </div>
+                        ) : null}
+                    </div>
+                ) : (
+                    <div className="flex h-full w-full flex-col items-center justify-center gap-1 text-sm" style={{ color: theme.node.placeholder }}>
+                        <Video className="size-7 opacity-35" />
+                        <span>{translate("canvas.emptyVideoNode")}</span>
+                    </div>
+                )}
+                <CanvasConnectionHandles />
+            </NodeHoverSurface>
+        </>
+    );
+});

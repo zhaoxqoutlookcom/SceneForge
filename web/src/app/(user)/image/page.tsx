@@ -1,0 +1,2000 @@
+"use client";
+import { ShareResultButton } from "@/features/shared-work/components/share-result-button";
+import { useGenerationShareSources } from "@/features/shared-work/use-generation-share-sources";
+import { useInsufficientCreditsPrompt } from "@/features/credits/use-insufficient-credits-prompt";
+import { showInsufficientCredits } from "@/features/credits/insufficient-credits";
+import { currentLanguageTag } from "@/features/locale/translate";
+
+import { translateMessage as translate } from "@/features/locale/translate";
+import { useTranslation } from "@/features/locale/use-translation";
+
+
+import { BookOpen, CloudUpload, Download, FolderPlus, PenLine, Cog, LoaderCircle, Palette, RefreshCw, Sparkles, Upload } from "lucide-react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { App, Button, Image, Modal, Tag, Tooltip, Typography } from "antd";
+import { nanoid } from "nanoid";
+
+import { ImageGeneratingCard, renderPendingImageToolCall } from "./components/pending-image-tool-call";
+import { regenerateImageRound } from "./image-round-regenerate";
+import { useModelConfigurationGuard } from "@/features/settings/hooks/use-model-configuration-guard";
+import { AssetPickerModal, type InsertAssetPayload } from "@/features/assets/components/asset-picker-modal";
+import { useAssetStore } from "@/features/assets/stores/use-asset-store";
+import { useUserStore } from "@/features/auth/stores/use-user-store";
+import { CreationWorkspace } from "@/features/generation/components/creation-workspace";
+import { RecentReferenceAssetPicker } from "@/features/generation/components/recent-reference-asset-picker";
+import { ImageSettingsPanel, imageQualityLabel, imageResolutionLabel, imageSizeLabel } from "@/features/generation/components/image-settings-panel";
+import { ImageListThumbnail } from "@/features/generation/components/image-list-thumbnail";
+import { MEDIA_FALLBACK_IMAGE, MediaPreview, useMediaFallback } from "@/features/generation/components/media-fallback";
+import { useModelCreditBalance } from "@/features/team/credit-balance";
+import { requestCreditCost } from "@/features/generation/constants/credits";
+import type { CreationComposerAction, CreationConversationItem, CreationReferenceChip, CreationStyleOption, CreationThreadRound, CreationThreadSection } from "@/features/generation/components/creation-workspace-types";
+import { useAgentChatSSE } from "@/features/chat/use-agent-chat-sse";
+import { useAgentThinking } from "@/features/chat/use-agent-thinking";
+import type { AgentActivityState, ChatAttachment, ChatMessageItem, ToolCallState } from "@/features/chat/types";
+import { buildChatThreadSection } from "@/features/generation/components/chat-thread-section";
+import { chatAttachmentsToMentionReferences, PromptMentionText } from "@/features/generation/components/prompt-mention-text";
+import { ChoiceGroup, ChoiceHistoryBar } from "@/features/generation/components/creation-message-thread";
+import { ResultDetailDialog, type ResultDetail } from "@/features/generation/components/result-detail-dialog";
+import { createToolExecutionActivity, finishRoundAgentActivities, finishRunningAgentActivities, mergePlanTaskActivityMessage, normalizeHistoricalAgentActivities, updateAgentActivityMessage, upsertAgentActivityMessage } from "@/features/generation/components/agent-activity";
+import { cancelAiTasksWithRefundPolicy, runCancelWithProviderRequestPolicy } from "@/features/generation/lib/cancel-provider-generation";
+import { findLatestPendingConversation, hasPendingImageConversation } from "@/features/generation/lib/generation-conversation-recovery";
+import { useGenerationConversations } from "@/features/generation/hooks/use-generation-conversations";
+import { getGenerationConversationStatus, hasRunningGeneration, type GenerationLogStatusFields } from "@/features/generation/lib/generation-log-status";
+import { selectGenerationAttachments } from "@/features/generation/lib/generation-retry";
+import { imageReferenceAttachments, referenceMediaType, referenceMediaUrl } from "@/features/generation/lib/reference-attachments";
+import { reconcileImageMentions, type PromptImageReference } from "@/features/generation/lib/image-reference-mentions";
+import { usePromptOptimization } from "@/features/generation/hooks/use-prompt-optimization";
+import { useCreationMode } from "@/features/generation/hooks/use-creation-mode";
+import type { CreationMode } from "@/features/generation/lib/creation-mode-preference";
+import { useRecentReferenceAssets } from "@/features/generation/hooks/use-recent-reference-assets";
+import type { RecentReferenceAsset } from "@/features/generation/lib/recent-reference-assets";
+import { imageReferenceLabel } from "@/features/generation/lib/image-reference-prompt";
+import { formatImageGenerationSettingsSummary } from "@/features/generation/lib/generation-settings-summary";
+import { loadImageLastUsedSettings, saveImageLastUsedSettings, type ImageLastUsedSettings } from "@/features/generation/lib/last-used-generation-settings";
+import { formatGenerationStyleMessage } from "@/features/generation/lib/style-command";
+import { formatBytes } from "@/features/generation/lib/image-utils";
+import type { ReferenceImage } from "@/features/generation/types/image";
+import { PromptSelectDialog } from "@/features/prompts/components/prompt-select-dialog";
+import { ModelPicker } from "@/features/settings/components/model-picker";
+import { modelOptionLabel, useConfigStore, useEffectiveConfig, type AiConfig } from "@/features/settings/stores/use-config-store";
+import { deleteStoredImages, resolveImageStorageInfo, resolveImageUrl, reuseOrUploadImage, uploadImage } from "@/features/storage/services/image-storage";
+import { downloadMedia } from "@/features/storage/services/media-download";
+import { createMediaDownloadFileName } from "@/features/storage/services/media-download-name";
+import { uploadRemoteObjectToStorage } from "@/features/storage/services/object-storage";
+import { useThemeStore } from "@/features/theme/stores/use-theme-store";
+import { canvasThemes } from "@/shared/lib/canvas-theme";
+import { useHomepageCreationDraft } from "@/features/homepage/hooks/use-homepage-creation-draft";
+import { consumeHomepageCreationHandoff, peekHomepageCreationHandoff } from "@/features/homepage/lib/homepage-creation-handoff";
+import { useSkillCreationHandoff } from "@/features/skill-market/hooks/use-skill-creation-handoff";
+import { consumeSkillCreationHandoff, peekSkillCreationHandoff, skillMarketKickoff } from "@/features/skill-market/lib/skill-creation-handoff";
+import { ASK_USER_MODEL_CONFIG, CONTINUE_AFTER_MODEL_CONFIG, MODEL_CONFIG_CONFIRMED_MESSAGE } from "@/features/skill-market/lib/skill-prompt-actions";
+import { clearResumedSkillConversation, readResumedSkillConversation, skillOptionFromSnapshot, writeResumedSkillConversation } from "@/features/skill-market/lib/skill-conversation-resume";
+import { clearInitialPromptFromLocation, readInitialPromptFromLocation } from "@/shared/lib/initial-prompt";
+import type { ObjectStorageFile } from "@/shared/types/object-storage";
+import { useMediaUrl } from "@/shared/hooks/use-media-url";
+import { deleteGenerationLogs, getAgentSessionHistory, getAiTaskPollingIntervalMilliseconds, listGenerationStyles, listSkills, markGenerationLogViewed, renameGenerationLogTitle, type GenerationStyleSnapshot, type SkillOption } from "@/services/api/server";
+
+type GeneratedImage = {
+    id: string;
+    dataUrl: string;
+    storageKey?: string;
+    durationMs: number;
+    width: number;
+    height: number;
+    bytes: number;
+    mimeType?: string;
+    objectStorage?: ObjectStorageFile;
+};
+
+type GenerationResult = {
+    id: string;
+    status: "pending" | "success" | "failed" | "canceled";
+    taskId?: string;
+    image?: GeneratedImage;
+    error?: string;
+};
+
+type RoundConfig = Pick<AiConfig, "model" | "imageModel" | "quality" | "imageResolution" | "size" | "count"> & {
+    resolution?: string;
+};
+
+type Round = {
+    id: string;
+    prompt: string;
+    generationPrompt?: string;
+    generationStyleSnapshots?: GenerationStyleSnapshot[];
+    /** 生成该轮时用户选择的技能快照 */
+    skill?: { id: number; name: string; targetType: string } | null;
+    /** 对话轮次中系统提供的选项（历史只读展示，不可再点击） */
+    choices?: { label: string; value: string; multiple?: boolean; action?: string }[];
+    references: ReferenceImage[];
+    config: RoundConfig;
+    results: GenerationResult[];
+    taskId?: string;
+    createdAt: number;
+    assistantText?: string;
+    activities?: AgentActivityState[];
+};
+
+const IMAGE_PREVIEW_BASE_HEIGHT = 240;
+const IMAGE_PREVIEW_MIN_WIDTH = 220;
+const IMAGE_PREVIEW_MAX_WIDTH = 520;
+
+type Conversation = GenerationLogStatusFields & {
+    id: string;
+    title: string;
+    rounds: Round[];
+    createdAt: number;
+    updatedAt: number;
+};
+
+export default function ImagePage() {
+    const translate = useTranslation();
+    const { message, modal } = App.useApp();
+    const fileInputRef = useRef<HTMLInputElement>(null);
+    const uploadChoiceInputRef = useRef<HTMLInputElement>(null);
+    const config = useConfigStore((state) => state.config);
+    const effectiveConfig = useEffectiveConfig();
+    const updateConfig = useConfigStore((state) => state.updateConfig);
+    const configHydrated = useConfigStore((state) => state.hydrated);
+    const ensureModelConfiguration = useModelConfigurationGuard();
+    const userId = useUserStore((state) => state.user?.id);
+    const addAsset = useAssetStore((state) => state.addAsset);
+    const resolvedTheme = useThemeStore((state) => state.resolvedTheme);
+    const theme = canvasThemes[resolvedTheme];
+    const { optimizingOperationId, optimizePrompt } = usePromptOptimization();
+    const { recentReferenceAssets, recordRecentReferenceAsset } = useRecentReferenceAssets(userId);
+    const isPromptOptimizing = optimizingOperationId === "image-page";
+
+    const [activeId, setActiveId] = useState<string | null>(null);
+    const [pendingStopping, setPendingStopping] = useState(false);
+    const activeIdRef = useRef(activeId);
+    const { conversations, setConversations, conversationsRef, refreshConversations, loadMoreConversations, conversationsLoading, hasMoreConversations, conversationsError, retryConversations } = useGenerationConversations("image", userId, activeIdRef, normalizeConversation);
+    useGenerationShareSources(conversations, "image");
+    const [conversationHistory, setConversationHistory] = useState<{ id: string; messages: ChatMessageItem[]; loading: boolean; error: string } | null>(null);
+    const historyRequestVersion = useRef(0);
+    const [prompt, setPrompt] = useState("");
+    const [styleOptions, setStyleOptions] = useState<CreationStyleOption[]>([]);
+    const [selectedStyles, setSelectedStyles] = useState<CreationStyleOption[]>([]);
+    const [styleLoading, setStyleLoading] = useState(false);
+    const [styleError, setStyleError] = useState<string | null>(null);
+    const [skillOptions, setSkillOptions] = useState<SkillOption[]>([]);
+    const [selectedSkill, setSelectedSkill] = useState<SkillOption | null>(null);
+    const [skillLoading, setSkillLoading] = useState(false);
+    const [skillError, setSkillError] = useState<string | null>(null);
+    const [references, setReferences] = useState<ReferenceImage[]>([]);
+    const [uploadingReferenceIds, setUploadingReferenceIds] = useState<string[]>([]);
+    const { mode: creationMode, changeMode: changeCreationMode } = useCreationMode("image");
+    const [skillMarketTaskActive, setSkillMarketTaskActive] = useState(false);
+    const skillTaskLockedRef = useRef(false);
+    // Chat 模式不走 Agent 规划，风格与技能都不参与生成，切换时清空避免残留
+    const handleCreationModeChange = (nextMode: CreationMode) => {
+        if (skillTaskLockedRef.current && nextMode === "chat") return;
+        if (nextMode === "chat") {
+            setSelectedStyles([]);
+            setSelectedSkill(null);
+            clearResumedSkillConversation("image");
+        }
+        changeCreationMode(nextMode);
+    };
+    const promptReferences = useMemo<PromptImageReference[]>(() => references.map((reference, index) => ({
+        id: reference.id,
+        name: reference.name,
+        label: imageReferenceLabel(index),
+        previewUrl: reference.dataUrl,
+        kind: "image",
+        disabled: uploadingReferenceIds.includes(reference.id),
+    })), [references, uploadingReferenceIds, translate.locale]);
+    const previousImageReferencesRef = useRef<PromptImageReference[]>([]);
+    const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+    const [settingsOpen, setSettingsOpen] = useState(false);
+    const [modelConfigContinueReady, setModelConfigContinueReady] = useState(false);
+    const [modelConfigRoundId, setModelConfigRoundId] = useState("");
+    const modelConfigPendingRef = useRef(false);
+    const [imageDraftSettingsModified, setImageDraftSettingsModified] = useState(false);
+    const [promptDialogOpen, setPromptDialogOpen] = useState(false);
+    const [assetPickerOpen, setAssetPickerOpen] = useState(false);
+    const [selectedIds, setSelectedIds] = useState<string[]>([]);
+    const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+    const [resultDetail, setResultDetail] = useState<ResultDetail | null>(null);
+    const [uploadingObjectStorageId, setUploadingObjectStorageId] = useState("");
+    const [managementMode, setManagementMode] = useState(false);
+    const initialPromptAppliedRef = useRef(false);
+    const homepageStartedRef = useRef(false);
+    const homepageDraft = useHomepageCreationDraft("image");
+    const skillHandoff = useSkillCreationHandoff("image");
+    const skillHandoffAppliedRef = useRef(false);
+    const skillHandoffStartedRef = useRef(false);
+    const skillMarketEntryRef = useRef(false);
+    if (skillHandoff || peekSkillCreationHandoff("image")) skillMarketEntryRef.current = true;
+    const skillResumeAppliedRef = useRef(false);
+    const [homepageReady, setHomepageReady] = useState(false);
+    const [focusInitialPrompt, setFocusInitialPrompt] = useState(false);
+
+    useEffect(() => {
+        const previous = previousImageReferencesRef.current;
+        previousImageReferencesRef.current = promptReferences;
+        const currentLabels = new Map(promptReferences.map((reference) => [reference.id, reference.label]));
+        if (!previous.some((reference) => currentLabels.get(reference.id) !== reference.label)) return;
+        setPrompt((current) => reconcileImageMentions(current, previous, promptReferences));
+    }, [promptReferences]);
+
+    useEffect(() => {
+        if (initialPromptAppliedRef.current) return;
+        const initialPrompt = readInitialPromptFromLocation();
+        if (!initialPrompt) return;
+        initialPromptAppliedRef.current = true;
+        setPrompt(initialPrompt);
+        setFocusInitialPrompt(true);
+        clearInitialPromptFromLocation();
+    }, []);
+
+    useEffect(() => {
+        if (!homepageDraft) return;
+        setPrompt(homepageDraft.prompt);
+        setReferences(homepageDraft.images);
+        setSelectedStyles(homepageDraft.creationMode === "chat" ? [] : homepageDraft.styles);
+        setSelectedSkill(homepageDraft.creationMode === "chat" ? null : homepageDraft.skill);
+        changeCreationMode(homepageDraft.creationMode);
+        setFocusInitialPrompt(true);
+        setHomepageReady(true);
+    }, [homepageDraft, changeCreationMode]);
+
+    useEffect(() => {
+        if (!skillHandoff || skillHandoffAppliedRef.current) return;
+        skillHandoffAppliedRef.current = true;
+        // 技能市场的「去创作」每次都新开对话，不接着上次的技能会话。
+        clearResumedSkillConversation("image");
+        historyRequestVersion.current += 1;
+        activeIdRef.current = null;
+        setActiveId(null);
+        setConversationHistory(null);
+        setChatMessages([]);
+        chatMessagesRef.current = [];
+        setToolCalls([]);
+        toolCallsRef.current = [];
+        resetThinkings();
+        setStreamingText(null);
+        streamingTextRef.current = null;
+        clearModelConfigContinue();
+        resetSession();
+        setSelectedSkill(skillHandoff.skill);
+        setSkillMarketTaskActive(true);
+        changeCreationMode("agent");
+        setPrompt(skillMarketKickoff(skillHandoff.skill.name));
+        setFocusInitialPrompt(true);
+    }, [skillHandoff, changeCreationMode]);
+
+    useEffect(() => {
+        if (!activeId || !selectedSkill) return;
+        writeResumedSkillConversation("image", { sessionId: activeId, skill: selectedSkill });
+    }, [activeId, selectedSkill]);
+
+    useEffect(() => {
+        if (!selectedSkill) return;
+        const full = skillOptions.find((skill) => skill.id === selectedSkill.id);
+        if (!full || (full.workflowType === selectedSkill.workflowType && full.aspectRatio === selectedSkill.aspectRatio && full.description === selectedSkill.description && full.coverUrl === selectedSkill.coverUrl)) return;
+        setSelectedSkill(full);
+    }, [skillOptions, selectedSkill]);
+
+    useEffect(() => {
+        let cancelled = false;
+        setStyleLoading(true);
+        setStyleError(null);
+        void listGenerationStyles("image")
+            .then((result) => {
+                if (!cancelled) setStyleOptions(result.styles);
+            })
+            .catch((error) => {
+                if (!cancelled) setStyleError(error instanceof Error ? error.message : translate("image.failedToLoadImageStyles"));
+            })
+            .finally(() => {
+                if (!cancelled) setStyleLoading(false);
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, [message]);
+
+    useEffect(() => {
+        let cancelled = false;
+        setSkillLoading(true);
+        setSkillError(null);
+        void listSkills("image")
+            .then((result) => {
+                if (!cancelled) setSkillOptions(result.skills);
+            })
+            .catch((error) => {
+                if (!cancelled) setSkillError(error instanceof Error ? error.message : translate("image.failedToLoadSkills"));
+            })
+            .finally(() => {
+                if (!cancelled) setSkillLoading(false);
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, [message]);
+
+    useEffect(() => {
+        if (!configHydrated || peekHomepageCreationHandoff("image")) return;
+        void loadImageLastUsedSettings()
+            .then((settings) => {
+                updateConfig("quality", settings.quality);
+                updateConfig("imageResolution", settings.imageResolution);
+                updateConfig("size", settings.size);
+                updateConfig("count", settings.count);
+            })
+            .catch((error) => console.error("读取上次图片生成设置失败", error));
+    }, [configHydrated, updateConfig]);
+
+    const updateImageSettings = (key: keyof ImageLastUsedSettings, value: string) => {
+        updateConfig(key, value);
+        void saveImageLastUsedSettings({ [key]: value }).catch((error) => console.error("保存上次图片生成设置失败", error));
+    };
+
+    const handleImageSettingsChange = (key: keyof ImageLastUsedSettings, value: string) => {
+        if (String(config[key]) !== value) {
+            setImageDraftSettingsModified(true);
+        }
+        updateImageSettings(key, value);
+    };
+
+    // Agent chat state
+    const [chatMessages, setChatMessages] = useState<ChatMessageItem[]>([]);
+    const { completedThinkings, activeThinking, onThoughtDelta, onThoughtComplete, resetThinkings } = useAgentThinking();
+    const [toolCalls, setToolCalls] = useState<ToolCallState[]>([]);
+    const [streamingText, setStreamingText] = useState<{ messageId: string; text: string } | null>(null);
+    const model = effectiveConfig.imageModel || effectiveConfig.model;
+    const agentCreationSettings = {
+        model,
+        size: selectedSkill?.aspectRatio || config.size,
+        resolution: config.imageResolution,
+        quality: config.quality,
+        count: 1,
+        ...(selectedStyles.length ? { generationStyleIds: selectedStyles.map((style) => style.id) } : {}),
+    };
+
+    // Refs to access latest state in SSE callbacks (updated inline to avoid React batch staleness)
+    const streamingTextRef = useRef(streamingText);
+    const toolCallsRef = useRef(toolCalls);
+    const chatMessagesRef = useRef(chatMessages);
+
+    const { sessionId, isStreaming, isQueued, isStopping, sendMessage, cancelMessage, isSessionBusy, hasInflightWork, resetSession, restoreSession } = useAgentChatSSE({
+        entrySource: "imagePage",
+        creationSettings: agentCreationSettings,
+        skillId: selectedSkill ? String(selectedSkill.id) : undefined,
+        mode: creationMode,
+        onRequestActivity: () => {
+            void refreshConversations();
+        },
+        onTextDelta: (msgId, delta) => {
+            setStreamingText((prev) => {
+                const next = prev?.messageId === msgId ? { ...prev, text: prev.text + delta } : { messageId: msgId, text: delta };
+                streamingTextRef.current = next;
+                return next;
+            });
+        },
+        onThoughtDelta,
+        onThoughtComplete,
+        onToolCall: (call) => {
+            setToolCalls((prev) => {
+                const next = prev.some((item) => item.callId === call.callId)
+                    ? prev.map((item) => (item.callId === call.callId ? call : item))
+                    : [...prev, call];
+                toolCallsRef.current = next;
+                return next;
+            });
+            setChatMessages((prev) => {
+                const next = upsertAgentActivityMessage(prev, createToolExecutionActivity(call));
+                chatMessagesRef.current = next;
+                return next;
+            });
+            // 只对生图/编辑工具在聊天区展示卡片，内部工具（query_history 等）不占聊天位
+            const isImageTool = call.name === "generate_image" || call.name === "edit_image";
+            if (isImageTool) {
+                // 工具开始执行前，将 LLM 已输出的文本保存为助手消息，避免被清空丢失
+                const streamed = streamingTextRef.current;
+                if (streamed && streamed.text) {
+                    setChatMessages((prev) => {
+                        const next = prev.some((item) => item.id === streamed.messageId)
+                            ? prev
+                            : [...prev, { id: streamed.messageId, role: "assistant" as const, text: streamed.text }];
+                        chatMessagesRef.current = next;
+                        return next;
+                    });
+                }
+                const toolText = call.name === "generate_image" ? translate("image.generatingImage") : translate("image.editingImage");
+                setChatMessages((prev) => {
+                    const toolMessage = { id: call.callId, role: "tool" as const, text: toolText, detail: call };
+                    const next = prev.some((item) => item.id === call.callId)
+                        ? prev.map((item) => (item.id === call.callId ? toolMessage : item))
+                        : [...prev, toolMessage];
+                    chatMessagesRef.current = next;
+                    return next;
+                });
+                // 工具开始执行时清空流式文本，避免 LLM 预回复文本与工具结果重复显示
+                setStreamingText(null);
+                streamingTextRef.current = null;
+            }
+        },
+        onToolProgress: (callId, taskId, progress) => {
+            setToolCalls((prev) => {
+                const next = prev.map((c) => (c.callId === callId ? { ...c, progress, taskId } : c));
+                toolCallsRef.current = next;
+                return next;
+            });
+            setChatMessages((prev) => {
+                const messagesWithProgress = prev.map((m) => {
+                    const detail = m.detail as ToolCallState | undefined;
+                    return m.role === "tool" && detail?.callId === callId ? { ...m, detail: { ...detail, progress, taskId } } : m;
+                });
+                const next = updateAgentActivityMessage(messagesWithProgress, `tool-${callId}`, { progress });
+                chatMessagesRef.current = next;
+                return next;
+            });
+            if (activeIdRef.current && !conversationsRef.current.some((conversation) => conversation.id === activeIdRef.current)) {
+                void refreshConversations();
+            }
+        },
+        onToolResult: (callId, ok, resultMsg, data) => {
+            const status: ToolCallState["status"] = data?.canceled ? "canceled" : ok ? "success" : "failed";
+            setToolCalls((prev) => {
+                const next = prev.map((c) => (c.callId === callId ? { ...c, status, resultMessage: resultMsg, resultData: data } : c));
+                toolCallsRef.current = next;
+                return next;
+            });
+            // 同步更新 chatMessages 中对应消息的 detail，否则 buildChatThreadSection 看到的永远是 executing
+            setChatMessages((prev) => {
+                const messagesWithResult = prev.map((m) => {
+                    const detail = m.detail as ToolCallState | undefined;
+                    return m.role === "tool" && detail?.callId === callId ? { ...m, detail: { ...detail, status, resultMessage: resultMsg, resultData: data } } : m;
+                });
+                const next = updateAgentActivityMessage(messagesWithResult, `tool-${callId}`, { status, progress: status === "success" ? 100 : undefined });
+                chatMessagesRef.current = next;
+                return next;
+            });
+        },
+        onTaskComplete: (messageId, text, action) => {
+            // 将流式文本保存为持久消息
+            const streamed = streamingTextRef.current;
+            setChatMessages((prev) => {
+                let next = finishRoundAgentActivities(prev, text || translate("image.completed"));
+                if (streamed && streamed.text) {
+                    const assistantMessage = { id: streamed.messageId, role: "assistant" as const, text: streamed.text, ...(action ? { action } : {}) };
+                    next = next.some((item) => item.id === streamed.messageId)
+                        ? next.map((item) => item.id === streamed.messageId ? { ...item, ...(action ? { action } : {}) } : item)
+                        : [...next, assistantMessage];
+                } else if (text || action) {
+                    const lastMessage = next.at(-1);
+                    next = lastMessage?.role === "assistant" && lastMessage.text === text
+                        ? action ? next.map((item, index) => index === next.length - 1 ? { ...item, action } : item) : next
+                        : [...next, { id: messageId || nanoid(), role: "assistant" as const, text, ...(action ? { action } : {}) }];
+                }
+                chatMessagesRef.current = next;
+                return next;
+            });
+            setStreamingText(null);
+            streamingTextRef.current = null;
+            resetThinkings();
+            // 刷新侧栏（后端已保存生成记录）。聊天区保留完整对话历史；已实时渲染的轮次由历史区按 liveRoundIds 过滤去重。
+            void refreshConversations();
+        },
+        onCanceled: (stoppedMessage) => {
+            resetThinkings();
+            setStreamingText(null);
+            streamingTextRef.current = null;
+            setToolCalls((prev) => {
+                const next = prev.map((call) => call.status === "executing" ? { ...call, status: "canceled" as const, resultMessage: stoppedMessage } : call);
+                toolCallsRef.current = next;
+                return next;
+            });
+            let hasExecutingTool = false;
+            const messagesWithCanceledTool = chatMessagesRef.current.map((item) => {
+                const detail = item.detail as ToolCallState | undefined;
+                if (item.role !== "tool" || detail?.status !== "executing") return item;
+                hasExecutingTool = true;
+                return { ...item, text: stoppedMessage, detail: { ...detail, status: "canceled" as const, resultMessage: stoppedMessage } };
+            });
+            const canceledMessages = finishRunningAgentActivities(messagesWithCanceledTool, "canceled", stoppedMessage);
+            if (!hasExecutingTool) {
+                canceledMessages.push({ id: nanoid(), role: "error", text: stoppedMessage });
+            }
+            chatMessagesRef.current = canceledMessages;
+            setChatMessages(canceledMessages);
+            void refreshConversations();
+        },
+        onPlanCreated: (planId, summary, taskCount) => {
+            setChatMessages((prev) => {
+                const next = upsertAgentActivityMessage(prev, {
+                    id: `plan-${planId}`,
+                    type: "plan-created",
+                    title: translate("image.createCreativePlan"),
+                    description: translate("image.tasksTotal", { value0: summary, value1: taskCount }),
+                    status: "success",
+                });
+                chatMessagesRef.current = next;
+                return next;
+            });
+        },
+        onPlanTaskStatus: (planId, taskId, status, statusMessage) => {
+            setChatMessages((prev) => {
+                const next = mergePlanTaskActivityMessage(prev, planId, taskId, status, statusMessage);
+                chatMessagesRef.current = next;
+                return next;
+            });
+        },
+        onPromptPrepared: (planId, taskId, strategy) => {
+            setChatMessages((prev) => {
+                const next = upsertAgentActivityMessage(prev, {
+                    id: `prompt-${planId}-${taskId}`,
+                    type: "prompt-prepared",
+                    title: strategy === "OPTIMIZE" ? translate("image.optimizeGenerationPrompt") : translate("image.prepareGenerationPrompt"),
+                    description: strategy === "OPTIMIZE" ? translate("image.promptOptimizedForYourCreativeGoal") : translate("image.keepOriginalPrompt"),
+                    status: "success",
+                });
+                chatMessagesRef.current = next;
+                return next;
+            });
+        },
+        onError: (error) => {
+            resetThinkings();
+            setChatMessages((prev) => {
+                const next = [...finishRunningAgentActivities(prev, "failed", error), { id: nanoid(), role: "error" as const, text: error }];
+                chatMessagesRef.current = next;
+                return next;
+            });
+        },
+    });
+
+    const creditCost = requestCreditCost({ modelCosts: effectiveConfig.modelCosts, model, taskType: "image", count: 1, resolution: config.imageResolution });
+    const creditBalance = useModelCreditBalance("image");
+    const balanceInsufficient = useInsufficientCreditsPrompt({ enabled: effectiveConfig.modelCosts.some((item) => item.model === model && item.taskType === "image"), requiredCredits: creditCost, availableCredits: creditBalance });
+    const activeConversation = conversations.find((item) => item.id === activeId) || null;
+    const currentTaskUsesSkill = skillMarketTaskActive || chatMessages.some((message) => Boolean(message.skill)) || Boolean(activeConversation?.rounds.some((round) => round.skill));
+    skillTaskLockedRef.current = currentTaskUsesSkill;
+    useEffect(() => {
+        if (!currentTaskUsesSkill || creationMode !== "chat") return;
+        changeCreationMode("agent");
+    }, [currentTaskUsesSkill, creationMode, changeCreationMode]);
+    const latestRound = activeConversation?.rounds.at(-1);
+    const historyModel = !imageDraftSettingsModified && activeId && latestRound?.config ? latestRound.config.imageModel || latestRound.config.model || "" : "";
+    // 新对话没有可回显的历史轮次时，直接展示进入页面后已载入的默认配置，样式与改过「更多设置」后一致。
+    const pageSettingsSummary = buildImageSettingsSummary(config, effectiveConfig, model);
+    const historySettingsSummary = !imageDraftSettingsModified && activeId && latestRound?.config ? buildImageSettingsSummary(latestRound.config, effectiveConfig, historyModel) : "";
+    const settingsSummary = historySettingsSummary || pageSettingsSummary;
+    const activeConversationPending = activeConversation ? hasPendingImageConversation(activeConversation) : false;
+    const activeImageTaskIds = () => {
+        const conversation = conversationsRef.current.find((item) => item.id === activeIdRef.current);
+        const pending = (conversation?.rounds ?? []).flatMap((round) => [
+            ...(round.taskId && round.results.some((result) => result.status === "pending") ? [round.taskId] : []),
+            ...round.results.flatMap((result) => result.status === "pending" && result.taskId ? [result.taskId] : []),
+        ]);
+        const live = toolCallsRef.current.flatMap((call) => call.status === "executing" && call.taskId ? [call.taskId] : []);
+        return [...new Set([...pending, ...live])];
+    };
+    const stopPendingGeneration = async () => {
+        const taskIds = activeImageTaskIds();
+        if (!taskIds.length) {
+            message.warning(translate("generation.noActiveGenerationToStop"));
+            return;
+        }
+        setPendingStopping(true);
+        try {
+            const outcome = await cancelAiTasksWithRefundPolicy(taskIds, modal);
+            if (outcome === "declined") return;
+            if (outcome === "refunded") message.success(translate("generation.generationStoppedCreditsRefunded"));
+            if (outcome === "forfeited") message.success(translate("generation.generationStoppedWithoutRefund"));
+            await refreshConversations();
+        } catch (error) {
+            message.error(error instanceof Error ? error.message : translate("chat.failedToStopGeneration"));
+        } finally {
+            setPendingStopping(false);
+        }
+    };
+    const canGenerate = Boolean(prompt.trim()) && !balanceInsufficient && !isStreaming && !isQueued && !activeConversationPending && !isPromptOptimizing && !uploadingReferenceIds.length;
+    const allSelected = Boolean(conversations.length) && selectedIds.length === conversations.length;
+
+    useEffect(() => {
+        if (!sessionId || sessionId === activeIdRef.current) return;
+        activeIdRef.current = sessionId;
+        setActiveId(sessionId);
+    }, [sessionId]);
+
+    // 离开页面会卸载状态。记住正在使用的技能会话，回来后继续引导，而不是把回答当成新图片直接生成。
+    useEffect(() => {
+        if (skillResumeAppliedRef.current || skillHandoff || peekSkillCreationHandoff("image") || peekHomepageCreationHandoff("image")) return;
+        const resumed = readResumedSkillConversation("image");
+        if (!resumed) return;
+        skillResumeAppliedRef.current = true;
+        setSelectedSkill(resumed.skill);
+        changeCreationMode("agent");
+        activeIdRef.current = resumed.sessionId;
+        setActiveId(resumed.sessionId);
+        restoreSession(resumed.sessionId);
+    }, [skillHandoff, changeCreationMode, restoreSession]);
+
+    useEffect(() => {
+        let cancelled = false;
+        void refreshConversations().then((nextConversations) => {
+            if (cancelled || activeIdRef.current || hasInflightWork() || skillHandoff || peekSkillCreationHandoff("image")) return;
+            if (!peekHomepageCreationHandoff("image")) {
+                const ongoing = [...nextConversations].sort((left, right) => right.updatedAt - left.updatedAt).find((conversation) => {
+                    const latest = conversation.rounds.at(-1);
+                    return Boolean(latest?.skill?.id) && !latest?.results?.some((result) => result.status === "success" || result.status === "pending" || Boolean(result.image?.dataUrl));
+                });
+                const skill = skillOptionFromSnapshot(ongoing?.rounds.at(-1)?.skill);
+                if (ongoing && skill) {
+                    skillResumeAppliedRef.current = true;
+                    setSelectedSkill(skill);
+                    changeCreationMode("agent");
+                    activeIdRef.current = ongoing.id;
+                    setActiveId(ongoing.id);
+                    restoreSession(ongoing.id);
+                    return;
+                }
+            }
+            const pendingConversation = findLatestPendingConversation(nextConversations, hasPendingImageConversation);
+            if (!pendingConversation) return;
+            activeIdRef.current = pendingConversation.id;
+            setActiveId(pendingConversation.id);
+            restoreSession(pendingConversation.id);
+        });
+        return () => {
+            cancelled = true;
+        };
+    }, [changeCreationMode, hasInflightWork, refreshConversations, restoreSession, skillHandoff]);
+
+    useEffect(() => {
+        if (!hasRunningGeneration(conversations)) return;
+        let cancelled = false;
+        let refreshTimer: number | undefined;
+        void getAiTaskPollingIntervalMilliseconds()
+            .then((intervalMilliseconds) => {
+                if (cancelled) return;
+                refreshTimer = window.setInterval(() => {
+                    void refreshConversations();
+                }, intervalMilliseconds);
+            })
+            .catch((error) => console.error("读取AI任务轮询配置失败", error));
+        return () => {
+            cancelled = true;
+            if (refreshTimer !== undefined) window.clearInterval(refreshTimer);
+        };
+    }, [conversations, refreshConversations]);
+
+    const addReferences = async (files?: FileList | File[] | null): Promise<ReferenceImage[]> => {
+        const imageFiles = Array.from(files || []).filter((file) => file.type.startsWith("image/"));
+        const placeholders = imageFiles.map((file) => ({
+            id: nanoid(),
+            name: file.name,
+            type: file.type,
+            dataUrl: URL.createObjectURL(file),
+        }));
+        if (!placeholders.length) {
+            return [];
+        }
+        setReferences((current) => [...current, ...placeholders]);
+        setUploadingReferenceIds((current) => [...current, ...placeholders.map((placeholder) => placeholder.id)]);
+        const uploaded: ReferenceImage[] = [];
+        await Promise.all(
+            placeholders.map(async (placeholder, index) => {
+                try {
+                    const file = imageFiles[index];
+                    const image = await uploadImage(file);
+                    recordRecentReferenceAsset({ kind: "image", url: image.objectStorage?.url || image.url, storageKey: image.storageKey, name: file.name });
+                    const uploadedReference: ReferenceImage = {
+                        ...placeholder,
+                        name: file.name,
+                        type: image.mimeType,
+                        dataUrl: image.url,
+                        storageKey: image.storageKey,
+                        objectStorage: image.objectStorage,
+                    };
+                    uploaded.push(uploadedReference);
+                    setReferences((current) =>
+                        current.map((reference) => (reference.id === placeholder.id ? uploadedReference : reference)),
+                    );
+                } catch (error) {
+                    setReferences((current) => current.filter((reference) => reference.id !== placeholder.id));
+                    message.error(error instanceof Error ? error.message : translate("image.failedToUploadReference", { value0: placeholder.name }));
+                } finally {
+                    URL.revokeObjectURL(placeholder.dataUrl);
+                    setUploadingReferenceIds((current) => current.filter((id) => id !== placeholder.id));
+                }
+            }),
+        );
+        return uploaded;
+    };
+
+    const clearModelConfigContinue = () => {
+        modelConfigPendingRef.current = false;
+        setModelConfigContinueReady(false);
+        setModelConfigRoundId("");
+    };
+
+    /** 打开更多设置让用户确认模型。技能配置了默认画幅时，先把它选进设置。关闭后才出现继续。 */
+    const beginModelConfigAdjustment = (roundId = "live") => {
+        const ratio = selectedSkill?.aspectRatio?.trim();
+        if (ratio && ratio !== config.size) {
+            updateImageSettings("size", ratio);
+            setImageDraftSettingsModified(true);
+        }
+        modelConfigPendingRef.current = true;
+        setModelConfigContinueReady(false);
+        setModelConfigRoundId(roundId);
+        setSettingsOpen(true);
+    };
+
+    const closeImageSettings = () => {
+        setSettingsOpen(false);
+        if (!modelConfigPendingRef.current) return;
+        modelConfigPendingRef.current = false;
+        setModelConfigContinueReady(true);
+    };
+
+    const generate = async () => {
+        if (isStreaming || isQueued) return;
+        const text = prompt.trim();
+        if (!text) {
+            message.error(translate("image.enterImagePrompt"));
+            return;
+        }
+        if (!ensureModelConfiguration("image", model)) return;
+        // Chat 模式不经过主 Agent，不需要文本模型
+        if (creationMode !== "chat" && !ensureModelConfiguration("text")) return;
+        if (balanceInsufficient) { showInsufficientCredits(); return; }
+
+        resetThinkings();
+        clearModelConfigContinue();
+
+        // Add user message to chat
+        setChatMessages((prev) => {
+            const next = [...prev, { id: nanoid(), role: "user" as const, text, generationStyles: selectedStyles, skill: selectedSkill }];
+            chatMessagesRef.current = next;
+            return next;
+        });
+
+        // Send via Agent SSE — chat model resolved server-side from user config
+        const currentAttachments = imageReferenceAttachments(references);
+        const previousAttachments = imageReferenceAttachments(latestRound?.references || []);
+        const attachments = selectGenerationAttachments(text, currentAttachments, previousAttachments);
+        await sendMessage(text, attachments.length ? attachments : undefined, agentCreationSettings);
+
+        setPrompt("");
+        setReferences([]);
+        setSelectedStyles([]);
+    };
+
+    useEffect(() => {
+        if (!homepageReady || !homepageDraft || homepageStartedRef.current || prompt.trim() !== homepageDraft.prompt.trim()) return;
+        homepageStartedRef.current = true;
+        consumeHomepageCreationHandoff("image");
+        void generate();
+    }, [homepageReady, homepageDraft, prompt, references, selectedStyles, selectedSkill, creationMode]);
+
+    useEffect(() => {
+        if (!skillHandoff || skillHandoffStartedRef.current) return;
+        if (creationMode !== "agent" || selectedSkill?.id !== skillHandoff.skill.id || prompt.trim() !== skillMarketKickoff(skillHandoff.skill.name)) return;
+        skillHandoffStartedRef.current = true;
+        consumeSkillCreationHandoff("image");
+        void generate();
+    }, [skillHandoff, creationMode, selectedSkill, prompt]);
+
+    const handleActionReply = async (value: string) => {
+        if (isStreaming || isQueued) return;
+        const text = value.trim();
+        if (!text) return;
+        if (!ensureModelConfiguration("image", model) || !ensureModelConfiguration("text")) return;
+        // 技能引导中选择生成比例时同步页面尺寸配置，保证最终生成任务按用户选择的比例（而非页面默认 1:1）
+        if (/^\d+:\d+$/.test(text)) {
+            updateConfig("size", text);
+        }
+        clearModelConfigContinue();
+        setChatMessages((prev) => {
+            const next = [...prev, { id: nanoid(), role: "user" as const, text, skill: selectedSkill }];
+            chatMessagesRef.current = next;
+            return next;
+        });
+        // 携带当前参考图附件：技能引导中用户上传的产品图需随确认消息送达，作为最终生成参考
+        const currentAttachments = imageReferenceAttachments(references);
+        await sendMessage(text, currentAttachments.length ? currentAttachments : undefined, agentCreationSettings);
+    };
+
+    /** 技能引导中"上传图片"按钮选择文件后：上传参考图并在对话区回显，随后自动发送带附件的消息。 */
+    const handleUploadFromChoice = async (files?: FileList | null) => {
+        if (!files?.length) return;
+        if (!ensureModelConfiguration("image", model) || !ensureModelConfiguration("text")) return;
+        const uploaded = await addReferences(files);
+        if (!uploaded.length || isStreaming || isQueued) return;
+        const text = translate("image.productImageUploaded");
+        const attachments = imageReferenceAttachments(uploaded);
+        const chatAttachments = attachments.map((attachment, index) => ({
+            id: `uploaded-${index}-${attachment.url || "unknown"}`,
+            name: attachment.name,
+            url: attachment.url,
+            type: attachment.type,
+        }));
+        setChatMessages((prev) => {
+            const next = [...prev, { id: nanoid(), role: "user" as const, text, attachments: chatAttachments, skill: selectedSkill }];
+            chatMessagesRef.current = next;
+            return next;
+        });
+        await sendMessage(text, attachments.length ? attachments : undefined, agentCreationSettings);
+    };
+
+    const regenerateRound = async (round: Round) => {
+        if (isStreaming || isQueued) return;
+        if (!ensureModelConfiguration("image", round.config.imageModel || round.config.model || model) || !ensureModelConfiguration("text")) return;
+        await regenerateImageRound(round, {
+            fallbackModel: model,
+            appendUserMessage: (text, generationStyles) => {
+                setChatMessages((prev) => {
+                    const next = [...prev, { id: nanoid(), role: "user" as const, text, generationStyles, skill: round.skill }];
+                    chatMessagesRef.current = next;
+                    return next;
+                });
+            },
+            sendMessage,
+        });
+        setSelectedStyles([]);
+    };
+
+    const newConversation = () => {
+        setActiveId(null);
+        activeIdRef.current = null;
+        historyRequestVersion.current += 1;
+        setConversationHistory(null);
+        setImageDraftSettingsModified(false);
+        setPrompt("");
+        setReferences([]);
+        setSelectedStyles([]);
+        setSelectedSkill(null);
+        setSkillMarketTaskActive(false);
+        clearResumedSkillConversation("image");
+        setSelectedIds([]);
+        setManagementMode(false);
+        setMobileSidebarOpen(false);
+        clearModelConfigContinue();
+        setChatMessages([]);
+        chatMessagesRef.current = [];
+        resetThinkings();
+        setToolCalls([]);
+        toolCallsRef.current = [];
+        setStreamingText(null);
+        streamingTextRef.current = null;
+        resetSession();
+    };
+
+    const loadConversationHistory = async (conversation: Conversation) => {
+        const requestVersion = ++historyRequestVersion.current;
+        setConversationHistory(null);
+        // 没有生成轮次的记录仍有真实对话，按需读取会话正文，不能显示为新建页。
+        if (conversation.rounds.length) return;
+        setConversationHistory({ id: conversation.id, messages: [], loading: true, error: "" });
+        try {
+            const messages = await getAgentSessionHistory(conversation.id);
+            if (requestVersion !== historyRequestVersion.current || activeIdRef.current !== conversation.id) return;
+            setConversationHistory({ id: conversation.id, messages, loading: false, error: "" });
+        } catch (error) {
+            if (requestVersion !== historyRequestVersion.current || activeIdRef.current !== conversation.id) return;
+            setConversationHistory({ id: conversation.id, messages: [], loading: false, error: error instanceof Error ? error.message : translate("image.failedToLoadConversationHistory") });
+        }
+    };
+
+    const selectConversation = (conversation: Conversation) => {
+        if (getGenerationConversationStatus(conversation) !== "none" && conversation.generationStatus !== "running") {
+            setConversations((current) => current.map((item) => (item.id === conversation.id ? { ...item, generationViewedAt: item.generationCompletedAt } : item)));
+            void markGenerationLogViewed(conversation.id).catch(() => void refreshConversations());
+        }
+        setActiveId(conversation.id);
+        activeIdRef.current = conversation.id;
+        setImageDraftSettingsModified(false);
+        clearModelConfigContinue();
+        // 清空 chat 状态，切换为历史记录视图
+        setChatMessages([]);
+        chatMessagesRef.current = [];
+        setToolCalls([]);
+        toolCallsRef.current = [];
+        resetThinkings();
+        setStreamingText(null);
+        streamingTextRef.current = null;
+        setPrompt("");
+        setReferences([]);
+        setSelectedStyles([]);
+        setSkillMarketTaskActive(false);
+        const skill = skillOptionFromSnapshot(conversation.rounds.at(-1)?.skill, skillOptions);
+        setSelectedSkill(skill);
+        if (skill) changeCreationMode("agent");
+        else clearResumedSkillConversation("image");
+        setMobileSidebarOpen(false);
+        restoreSession(conversation.id);
+        void loadConversationHistory(conversation);
+    };
+
+    const toggleAll = () => {
+        setSelectedIds(allSelected ? [] : conversations.map((item) => item.id));
+    };
+
+    const deleteSelected = () => {
+        if (selectedIds.some((id) => isSessionBusy(id))) {
+            message.warning(translate("image.generationIsRunningStopItOrWait"));
+            return;
+        }
+        const imageKeys = conversations
+            .filter((conversation) => selectedIds.includes(conversation.id))
+            .flatMap((conversation) => conversation.rounds.flatMap((round) => round.results.flatMap((result) => (result.image?.storageKey ? [result.image.storageKey] : []))));
+        void Promise.all([deleteStoredImages(imageKeys), deleteGenerationLogs(selectedIds)]).then(refreshConversations);
+        if (activeId && selectedIds.includes(activeId)) {
+            setActiveId(null);
+            activeIdRef.current = null;
+            setImageDraftSettingsModified(false);
+            setPrompt("");
+            setReferences([]);
+            setSelectedStyles([]);
+            setSelectedSkill(null);
+            setSkillMarketTaskActive(false);
+            clearResumedSkillConversation("image");
+            resetSession();
+        }
+        setSelectedIds([]);
+        setManagementMode(false);
+        setDeleteConfirmOpen(false);
+    };
+
+    const downloadImage = async (image: GeneratedImage) => {
+        try {
+            const extension = image.mimeType?.split("/")[1] || image.dataUrl.match(/^data:image\/([^;]+)/)?.[1] || "png";
+            await downloadMedia(image, createMediaDownloadFileName("img", extension));
+        } catch (error) {
+            message.error(error instanceof Error ? error.message : translate("image.failedToDownloadImage"));
+        }
+    };
+
+    const openImageResultDetail = (image: GeneratedImage, index: number, round: Round) => {
+        setResultDetail({
+            media: { id: image.id, storageKey: image.storageKey, kind: "image", url: image.dataUrl, ossUrl: image.objectStorage?.url, width: image.width, height: image.height, bytes: image.bytes, mimeType: image.mimeType },
+            prompt: round.prompt,
+            generationPrompt: round.generationPrompt,
+            references: round.references,
+            onDownload: () => downloadImage(image),
+        });
+    };
+
+    const addResultToReferences = async (image: GeneratedImage, index: number) => {
+        try {
+            const stored = await reuseOrUploadImage(image);
+            setReferences((current) => [
+                ...current,
+                {
+                    id: nanoid(),
+                    name: `result-${index + 1}.png`,
+                    type: stored.mimeType,
+                    dataUrl: stored.url,
+                    storageKey: stored.storageKey,
+                    objectStorage: stored.objectStorage || image.objectStorage,
+                },
+            ]);
+            message.success(translate("image.referenceImageAdded"));
+        } catch (error) {
+            message.error(error instanceof Error ? error.message : translate("image.failedToAddReference"));
+        }
+    };
+
+    const saveResultToAssets = (image: GeneratedImage, index: number) => {
+        if (!image.storageKey) {
+            message.error(translate("image.generatedImageHasNoStorageKeyRegenerateItFirst"));
+            return;
+        }
+        addAsset({
+            kind: "image",
+            title: translate("image.generationResult", { value0: index + 1 }),
+            coverUrl: image.dataUrl,
+            tags: [],
+            source: "生图工作台",
+            data: {
+                dataUrl: image.dataUrl,
+                storageKey: image.storageKey,
+                width: image.width,
+                height: image.height,
+                bytes: image.bytes,
+                mimeType: image.mimeType || "image/png",
+                objectStorage: image.objectStorage,
+            },
+            metadata: {
+                source: "image-page",
+            },
+        });
+        message.success(translate("image.addedToMyAssets"));
+    };
+
+    const uploadResultToObjectStorage = async (image: GeneratedImage, index: number) => {
+        if (image.objectStorage?.url) {
+            try {
+                await navigator.clipboard.writeText(image.objectStorage.url);
+                message.success(translate("image.cloudStorageURLCopied"));
+            } catch {
+                message.error(translate("image.failedToCopyCloudStorageURL"));
+            }
+            return;
+        }
+
+        setUploadingObjectStorageId(image.id);
+        try {
+            const file = await uploadRemoteObjectToStorage({
+                storageKey: image.storageKey,
+                sourceUrl: image.dataUrl,
+                kind: "image",
+                mimeType: image.mimeType,
+            });
+            setConversations((current) =>
+                current.map((conversation) => ({
+                    ...conversation,
+                    rounds: conversation.rounds.map((round) => ({
+                        ...round,
+                        results: round.results.map((result) => (result.image?.id === image.id ? { ...result, image: { ...result.image, objectStorage: file } } : result)),
+                    })),
+                })),
+            );
+            message.success(translate("image.uploadedToCloudURLSaved"));
+        } catch (error) {
+            message.error(error instanceof Error ? error.message : translate("image.failedToUploadToCloudStorage"));
+        } finally {
+            setUploadingObjectStorageId("");
+        }
+    };
+
+    const insertPickedAsset = (payload: InsertAssetPayload) => {
+        if (payload.kind === "text") {
+            setPrompt(payload.content);
+        } else if (payload.kind === "image") {
+            if (!payload.storageKey) {
+                message.error(translate("image.imageAssetHasNoMediaStorageKeyUploadIt"));
+            } else {
+                setReferences((current) => [
+                    ...current,
+                    {
+                        id: nanoid(),
+                        name: payload.title,
+                        type: payload.mimeType,
+                        dataUrl: payload.dataUrl,
+                        storageKey: payload.storageKey,
+                        objectStorage: payload.objectStorage,
+                    },
+                ]);
+            }
+        } else {
+            message.warning(translate("image.imageWorkspaceAcceptsTextOrImageReferences"));
+        }
+        setAssetPickerOpen(false);
+    };
+
+    const renameConversationTitle = async (conversationId: string, title: string) => {
+        await renameGenerationLogTitle(conversationId, title);
+        setConversations((current) => {
+            const nextConversations = current.map((conversation) => (conversation.id === conversationId ? { ...conversation, title } : conversation));
+            conversationsRef.current = nextConversations;
+            return nextConversations;
+        });
+    };
+
+    const deleteConversation = async (conversationId: string) => {
+        if (isSessionBusy(conversationId)) {
+            message.warning(translate("image.generationIsRunningStopItOrWait"));
+            return;
+        }
+        const conversation = conversationsRef.current.find((item) => item.id === conversationId);
+        const imageKeys = conversation?.rounds.flatMap((round) => round.results.flatMap((result) => (result.image?.storageKey ? [result.image.storageKey] : []))) || [];
+        await Promise.all([deleteStoredImages(imageKeys), deleteGenerationLogs([conversationId])]);
+        if (activeIdRef.current === conversationId) {
+            newConversation();
+        }
+        await refreshConversations();
+    };
+
+    const conversationItems = buildImageConversationItems(conversations, activeId, selectedIds, isSessionBusy);
+    const referenceChips: CreationReferenceChip[] = references.map((reference, index) => {
+        const uploading = uploadingReferenceIds.includes(reference.id);
+        return {
+            id: reference.id,
+            label: uploading ? translate("image.uploading", { value0: imageReferenceLabel(index) }) : imageReferenceLabel(index),
+            preview: (
+                <div className="relative size-11">
+                    <ReferenceChipImage reference={reference} previewDisabled={uploading} />
+                    {uploading ? (
+                        <span className="pointer-events-none absolute inset-0 grid place-items-center rounded-xl bg-black/35 text-white">
+                            <LoaderCircle className="size-4 animate-spin" />
+                        </span>
+                    ) : null}
+                </div>
+            ),
+            onRemove: () => setReferences((current) => current.filter((item) => item.id !== reference.id)),
+        };
+    });
+    // 图片生成页只回填图片素材，视频素材留在视频页使用。
+    const addRecentReference = (asset: RecentReferenceAsset) => {
+        setReferences((current) => {
+            if (current.some((reference) => reference.dataUrl === asset.url)) return current;
+            return [...current, { id: nanoid(), name: asset.name || translate("image.recentReferenceImages"), type: "image/*", dataUrl: asset.url, storageKey: asset.storageKey }];
+        });
+    };
+    const composerActions: CreationComposerAction[] = [
+        {
+            key: "upload",
+            label: translate("image.referenceImage"),
+            icon: <Upload className="size-3.5" />,
+            popoverContent: (
+                <RecentReferenceAssetPicker
+                    assets={recentReferenceAssets.filter((asset) => asset.kind === "image")}
+                    selectedUrls={references.map((reference) => reference.dataUrl)}
+                    onSelect={addRecentReference}
+                />
+            ),
+            onClick: () => fileInputRef.current?.click(),
+        },
+        {
+            key: "prompt-library",
+            label: translate("image.promptLibrary"),
+            icon: <BookOpen className="size-3.5" />,
+            onClick: () => setPromptDialogOpen(true),
+        },
+        {
+            key: "optimize-prompt",
+            label: translate("image.optimizePromptWithAI"),
+            icon: <Sparkles className="size-3.5" />,
+            placement: "submit",
+            iconOnly: true,
+            disabled: !prompt.trim() || isStreaming || isQueued || activeConversationPending || isPromptOptimizing,
+            loading: isPromptOptimizing,
+            onClick: () => void optimizePrompt({
+                operationId: "image-page",
+                generationType: "image",
+                prompt,
+                generationStyleIds: selectedStyles.map((style) => style.id),
+                imageReferences: promptReferences,
+                onSuccess: (optimizedPrompt) => setPrompt(reconcileImageMentions(optimizedPrompt, promptReferences, previousImageReferencesRef.current)),
+            }),
+        },
+        {
+            key: "assets",
+            label: translate("image.assetLibrary"),
+            icon: <FolderPlus className="size-3.5" />,
+            onClick: () => setAssetPickerOpen(true),
+        },
+        {
+            key: "settings",
+            label: settingsSummary || translate("image.moreSettings"),
+            className: settingsSummary ? "creation-composer-action-settings" : undefined,
+            icon: <Cog className="size-3.5" />,
+            onClick: () => setSettingsOpen(true),
+        },
+    ];
+    // 聊天区已实时渲染的生成轮次不再进入历史区，避免同一轮重复展示；纯文本对话保留在聊天区。
+    // 当前会话激活时（chatMessages 非空），已落库的纯对话轮次也在聊天区渲染过，历史区一并跳过；
+    // 刷新或切换会话后 chatMessages 清空，历史区恢复完整展示（含纯对话轮次）。
+    const liveRoundIds = new Set(chatMessages.filter((item) => item.role === "tool").map((item) => item.id));
+    const hideDialogueRounds = chatMessages.length > 0;
+    const displayedConversation = activeConversation && (liveRoundIds.size || hideDialogueRounds)
+        ? {
+              ...activeConversation,
+              rounds: activeConversation.rounds.filter((round) => {
+                  if (liveRoundIds.has(round.id)) return false;
+                  return !(hideDialogueRounds && round.results.length === 0);
+              }),
+          }
+        : activeConversation;
+    const interactiveChoiceRoundId = chatMessages.length
+        ? undefined
+        : [...(activeConversation?.rounds ?? [])].reverse().find((round) => round.choices?.length && !round.results.some((result) => result.status === "success" || result.status === "pending" || Boolean(result.image)))?.id;
+    const threadSections = displayedConversation
+        ? buildImageThreadSections(displayedConversation, {
+              uploadingObjectStorageId,
+              onEdit: addResultToReferences,
+              onDownload: downloadImage,
+              onSaveAsset: saveResultToAssets,
+              onUploadObjectStorage: uploadResultToObjectStorage,
+              onOpenDetail: openImageResultDetail,
+              onRegenerate: regenerateRound,
+              interactiveChoiceRoundId,
+              onChoiceReply: (value) => void handleActionReply(value),
+              onOpenModelSettings: beginModelConfigAdjustment,
+              onModelConfigContinue: () => void handleActionReply(MODEL_CONFIG_CONFIRMED_MESSAGE),
+              modelConfigContinueRoundId: modelConfigContinueReady ? modelConfigRoundId : "",
+              onUploadChoice: () => uploadChoiceInputRef.current?.click(),
+              onUploadVideoChoice: () => message.warning(translate("image.imageWorkspaceAcceptsTextOrImageReferences")),
+          })
+        : [];
+
+    // 聊天区用户消息里的 @ 引用按图片编号渲染成与输入框一致的芯片。
+    const renderImageUserContent = ({ userText, attachments }: { userText: string; attachments?: ChatAttachment[] }) => {
+        const mentionReferences = chatAttachmentsToMentionReferences(attachments, (_kind, index) => imageReferenceLabel(index));
+        return mentionReferences.length ? <PromptMentionText text={userText} references={mentionReferences} /> : userText;
+    };
+    const skillThreadMessages = modelConfigContinueReady && modelConfigRoundId === "live"
+        ? chatMessages.map((message, index, all) => {
+              const isModelPrompt = message.role === "assistant" && message.action?.options?.some((option) => option.action === ASK_USER_MODEL_CONFIG);
+              const laterPrompt = all.slice(index + 1).some((item) => item.role === "assistant" && item.action?.options?.some((option) => option.action === ASK_USER_MODEL_CONFIG));
+              if (!isModelPrompt || laterPrompt || !message.action) return message;
+              return {
+                  ...message,
+                  action: {
+                      ...message.action,
+                      type: "choice" as const,
+                      options: [{ label: translate("agentActions.continueAfterModelConfig"), value: MODEL_CONFIG_CONFIRMED_MESSAGE, action: CONTINUE_AFTER_MODEL_CONFIG }],
+                  },
+              };
+          })
+        : chatMessages;
+    const chatThreadSection = buildChatThreadSection(
+        skillThreadMessages,
+        completedThinkings,
+        activeThinking,
+        streamingText,
+        toolCalls,
+        (data, round) =>
+            renderResultImages(data, {
+                uploadingObjectStorageId,
+                onEdit: addResultToReferences,
+                onDownload: downloadImage,
+                onSaveAsset: saveResultToAssets,
+                onUploadObjectStorage: uploadResultToObjectStorage,
+                onOpenDetail: (image, index) => {
+                    const roundReferences = chatAttachmentsToImageReferences(round?.attachments);
+                    setResultDetail({
+                        media: { id: image.id, storageKey: image.storageKey, kind: "image", url: image.dataUrl, ossUrl: image.objectStorage?.url, width: image.width, height: image.height, bytes: image.bytes, mimeType: image.mimeType },
+                        prompt: round?.userText || prompt,
+                        references: roundReferences.length ? roundReferences : references,
+                        onDownload: () => downloadImage(image),
+                    });
+                },
+            }),
+        renderPendingImageToolCall,
+        undefined,
+        undefined,
+        renderImageUserContent,
+        isStreaming || isQueued,
+    );
+    // 历史记录与当前生成中消息同时展示；当前待生成轮次仅在聊天区渲染。
+    const activeHistory = conversationHistory?.id === activeId ? conversationHistory : null;
+    const historyThreadSection = activeHistory?.messages.length
+        ? buildChatThreadSection(activeHistory.messages, [], null, null, [], () => null, undefined, undefined, undefined, renderImageUserContent)
+        : null;
+    const allThreadSections = [
+        ...(historyThreadSection ? [{ ...historyThreadSection, id: `history-${activeId}` }] : []),
+        ...threadSections,
+        ...(chatThreadSection ? [chatThreadSection] : []),
+    ];
+
+    return (
+        <>
+            <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                multiple
+                className="hidden"
+                onChange={(event) => {
+                    void addReferences(event.target.files);
+                    event.target.value = "";
+                }}
+            />
+            <input
+                ref={uploadChoiceInputRef}
+                type="file"
+                accept="image/*"
+                multiple
+                className="hidden"
+                onChange={(event) => {
+                    void handleUploadFromChoice(event.target.files);
+                    event.target.value = "";
+                }}
+            />
+
+            <CreationWorkspace
+                sidebar={{
+                    heading: translate("image.startCreating"),
+                    items: conversationItems,
+                    loading: conversationsLoading,
+                    hasMore: hasMoreConversations,
+                    loadError: conversationsError ? translate("generation.failedToLoadConversations") : null,
+                    onLoadMore: loadMoreConversations,
+                    onRetry: () => void retryConversations(),
+                    managementMode,
+                    hasSelection: selectedIds.length > 0,
+                    mobileOpen: mobileSidebarOpen,
+                    onOpenMobile: () => setMobileSidebarOpen(true),
+                    onCloseMobile: () => setMobileSidebarOpen(false),
+                    onCreate: newConversation,
+                    onToggleManagement: () => setManagementMode((current) => !current),
+                    onToggleSelectAll: toggleAll,
+                    onDeleteSelected: () => setDeleteConfirmOpen(true),
+                    onSelectConversation: (conversationId) => {
+                        const conversation = conversations.find((item) => item.id === conversationId);
+                        if (conversation) {
+                            selectConversation(conversation);
+                        }
+                    },
+                    onToggleConversation: (conversationId, checked) => setSelectedIds((current) => (checked ? Array.from(new Set([...current, conversationId])) : current.filter((item) => item !== conversationId))),
+                    onRenameConversation: renameConversationTitle,
+                    onDeleteConversation: deleteConversation,
+                }}
+                thread={{
+                    sections: allThreadSections,
+                    onActionReply: (value) => void handleActionReply(value),
+                    onOpenModelSettings: () => beginModelConfigAdjustment("live"),
+                    onUploadImage: () => uploadChoiceInputRef.current?.click(),
+                    onUploadVideo: () => message.warning(translate("image.imageWorkspaceAcceptsTextOrImageReferences")),
+                    emptyState: activeConversation ? (
+                        <div className="flex h-full flex-col items-center justify-center gap-3 text-sm text-[var(--studio-muted)]" role={activeHistory?.error ? "alert" : "status"}>
+                            {activeHistory?.loading ? <LoaderCircle className="size-5 animate-spin" /> : null}
+                            <span>{activeHistory?.loading ? translate("image.loadingConversationHistory") : activeHistory?.error || translate("generation.noConversations")}</span>
+                            {activeHistory?.error ? <Button onClick={() => void loadConversationHistory(activeConversation)}>{translate("image.retryLoadingConversationHistory")}</Button> : null}
+                        </div>
+                    ) : (
+                        <div className="flex h-full flex-col justify-center pb-28 pt-12">
+                            <div className="relative mx-auto w-full max-w-5xl px-6 sm:px-10 lg:-left-4 lg:px-3">
+                                <div className="relative -top-[10%] max-w-2xl">
+                                    <div className="mb-5 flex items-center gap-2.5 text-[11px] font-semibold uppercase text-[var(--studio-action)]">
+                                        <span className="text-[var(--studio-faint)]">01</span>
+                                        Image Generation Workspace
+                                    </div>
+                                    <h2 className="text-[clamp(52px,8vw,108px)] font-black uppercase leading-[0.82] text-[var(--studio-ink)]">
+                                        Image
+                                        <br />
+                                        <span className="text-transparent [-webkit-text-stroke:1px_var(--studio-ink)]">Agent</span>
+                                    </h2>
+                                    <p className="mt-7 max-w-lg text-base leading-7 text-[var(--studio-text)]">{translate("image.startWithAPromptToShapeCompositionMaterialsAnd")}</p>
+                                </div>
+                            </div>
+                        </div>
+                    ),
+                }}
+                composer={{
+                    agentLabel: "Image Agent",
+                    value: prompt,
+                    placeholder: translate("image.describeSubjectStyleCompositionLightingAndPurpose"),
+                    references: referenceChips,
+                    imageReferences: promptReferences,
+                    styleOptions,
+                    selectedStyles,
+                    styleLoading,
+                    styleError,
+                    skillOptions,
+                    selectedSkill,
+                    skillLoading,
+                    skillError,
+                    actions: composerActions,
+                    creationMode,
+                    onCreationModeChange: handleCreationModeChange,
+                    chatModeLocked: currentTaskUsesSkill,
+                    running: isStreaming || activeConversationPending,
+                    queued: isQueued,
+                    canSubmit: canGenerate,
+                    stopping: isStopping || pendingStopping,
+                    focusWhenValueSet: focusInitialPrompt,
+                    creditCost,
+                    onChange: setPrompt,
+                    onStyleSelect: (style) => setSelectedStyles([style]),
+                    onStyleRemove: (styleId) => setSelectedStyles((current) => current.filter((style) => style.id !== styleId)),
+                    onSkillSelect: (skill) => setSelectedSkill(skill),
+                    onSkillRemove: () => {
+                        setSelectedSkill(null);
+                        clearResumedSkillConversation("image");
+                    },
+                    onPasteImages: (files) => void addReferences(files),
+                    onSubmit: () => void generate(),
+                    onStop: isStreaming || isQueued
+                        ? () => void runCancelWithProviderRequestPolicy(modal, (forfeit) => cancelMessage(forfeit), activeImageTaskIds()).catch((error) => message.error(error instanceof Error ? error.message : translate("chat.failedToStopGeneration")))
+                        : activeConversationPending ? () => void stopPendingGeneration() : undefined,
+                }}
+                settings={{
+                    open: settingsOpen,
+                    title: translate("image.imageSettings"),
+                    onClose: closeImageSettings,
+                    content: (
+                        <div className="space-y-4">
+                            <ImageSettingsPanel config={config} onConfigChange={handleImageSettingsChange} theme={theme} showTitle={false} showCount={false} className="space-y-4 px-0 py-0" />
+                            <div>
+                                <label className="mb-1.5 block text-sm font-semibold text-[var(--studio-ink)]">{translate("image.model")}</label>
+                                <ModelPicker
+                                    config={effectiveConfig}
+                                    value={historyModel || model}
+                                    onChange={(value) => {
+                                        if (value !== (historyModel || model)) {
+                                            setImageDraftSettingsModified(true);
+                                        }
+                                        updateConfig("imageModel", value);
+                                    }}
+                                    capability="image"
+                                    fullWidth
+                                />
+                            </div>
+                        </div>
+                    ),
+                }}
+            />
+
+            <PromptSelectDialog open={promptDialogOpen} onOpenChange={setPromptDialogOpen} onSelect={setPrompt} />
+            <AssetPickerModal open={assetPickerOpen} defaultTab="my-assets" onInsert={(payload) => void insertPickedAsset(payload)} onClose={() => setAssetPickerOpen(false)} />
+            <Modal title={translate("image.deleteConversation")} open={deleteConfirmOpen} onCancel={() => setDeleteConfirmOpen(false)} onOk={deleteSelected} okText={translate("image.delete")} okButtonProps={{ danger: true }} cancelText={translate("image.cancel")}>
+                {translate("image.deleteSelected")}{selectedIds.length} {translate("image.conversations")}</Modal>
+            <ResultDetailDialog detail={resultDetail} onClose={() => setResultDetail(null)} />
+        </>
+    );
+}
+
+/** 从后端 resultData 渲染可交互的小尺寸图片卡片，兼容 urls 和 items 两种格式 */
+function renderResultImages(
+    data: Record<string, unknown>,
+    handlers: {
+        uploadingObjectStorageId: string;
+        onEdit: (image: GeneratedImage, index: number) => void;
+        onDownload: (image: GeneratedImage, index: number) => void;
+        onSaveAsset: (image: GeneratedImage, index: number) => void;
+        onUploadObjectStorage: (image: GeneratedImage, index: number) => void;
+        onOpenDetail?: (image: GeneratedImage, index: number) => void;
+    },
+): React.ReactNode {
+    const images = extractGeneratedImages(data);
+    if (!images.length) return null;
+    return (
+        <div className="flex flex-wrap items-start gap-3">
+            {images.map((image, index) => (
+                <ResultCard
+                    key={image.id}
+                    image={image}
+                    index={index}
+                    uploadingObjectStorage={handlers.uploadingObjectStorageId === image.id}
+                    onEdit={handlers.onEdit}
+                    onDownload={handlers.onDownload}
+                    onSaveAsset={handlers.onSaveAsset}
+                    onUploadObjectStorage={handlers.onUploadObjectStorage}
+                    onOpenDetail={handlers.onOpenDetail}
+                />
+            ))}
+        </div>
+    );
+}
+
+function extractGeneratedImages(data: Record<string, unknown>): GeneratedImage[] {
+    const items = Array.isArray(data.items) ? (data.items as Record<string, unknown>[]) : [];
+    if (items.length) {
+        return items
+            .map((item, index) => {
+                const dataUrl = readString(item.url) || readString(item.dataUrl);
+                return {
+                    id: readString(item.id) || readString(item.storageKey) || readString(item.key) || `image-${index + 1}`,
+                    dataUrl,
+                    storageKey: readString(item.storageKey) || readString(item.key) || undefined,
+                    durationMs: readNumber(item.durationMs),
+                    width: readNumber(item.width),
+                    height: readNumber(item.height),
+                    bytes: readNumber(item.bytes),
+                    mimeType: readString(item.mimeType) || undefined,
+                    objectStorage: readObjectStorage(item.objectStorage),
+                };
+            })
+            .filter((image) => Boolean(image.dataUrl));
+    }
+
+    const urls = Array.isArray(data.urls) ? (data.urls as unknown[]) : [];
+    return urls
+        .map((url, index) => {
+            const dataUrl = typeof url === "string" ? url : "";
+            return {
+                id: `image-${index + 1}`,
+                dataUrl,
+                durationMs: 0,
+                width: 0,
+                height: 0,
+                bytes: 0,
+            };
+        })
+        .filter((image) => Boolean(image.dataUrl));
+}
+
+function readString(value: unknown): string {
+    return typeof value === "string" ? value : "";
+}
+
+function readNumber(value: unknown): number {
+    return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+function readObjectStorage(value: unknown): ObjectStorageFile | undefined {
+    if (!value || typeof value !== "object") {
+        return undefined;
+    }
+    return value as ObjectStorageFile;
+}
+
+/** 聊天区该轮用户消息的参考附件转换为详情弹窗使用的 ReferenceImage（仅取图片附件）。 */
+function chatAttachmentsToImageReferences(attachments: ChatAttachment[] | undefined): ReferenceImage[] {
+    if (!attachments?.length) return [];
+    return attachments
+        .filter((attachment) => Boolean(attachment.url.trim()) && (!attachment.type || attachment.type.startsWith("image/")))
+        .map((attachment) => ({
+            id: attachment.id,
+            name: attachment.name,
+            type: attachment.type || "image/*",
+            dataUrl: attachment.url,
+        }));
+}
+
+/** 根据图片设置生成 composer 按钮摘要，历史配置缺字段时沿用面板默认值。 */
+function buildImageSettingsSummary(settings: Partial<Pick<AiConfig, "quality" | "imageResolution" | "size">> & { resolution?: string }, modelConfig: AiConfig, model: string): string {
+    return formatImageGenerationSettingsSummary({
+        quality: imageQualityLabel(settings.quality || "medium"),
+        resolution: imageResolutionLabel(settings.imageResolution || settings.resolution || "2K"),
+        ratio: imageSizeLabel(settings.size || "1:1"),
+        model: modelOptionLabel(modelConfig, model),
+    });
+}
+
+function buildImageConversationItems(conversations: Conversation[], activeId: string | null, selectedIds: string[], isSessionBusy: (sessionId: string) => boolean): CreationConversationItem[] {
+    return conversations.map((conversation) => {
+        const latestImage = conversation.rounds
+            .slice()
+            .reverse()
+            .flatMap((round) => round.results)
+            .find((result) => result.status === "success" && result.image)?.image;
+
+        return {
+            id: conversation.id,
+            title: conversation.title,
+            subtitle: translate("image.rounds", { value0: formatConversationTime(conversation.updatedAt), value1: conversation.rounds.length }),
+            preview: latestImage?.storageKey
+                ? <ImageListThumbnail storageKey={latestImage.storageKey} className="size-10 rounded-xl object-cover" />
+                : <MediaPreview kind="image" src={latestImage?.dataUrl} className="size-10 rounded-xl object-cover" />,
+            active: activeId === conversation.id,
+            selected: selectedIds.includes(conversation.id),
+            status: isSessionBusy(conversation.id) ? "running" : getGenerationConversationStatus(conversation),
+        };
+    });
+}
+
+function buildImageThreadSections(
+    activeConversation: Conversation,
+    handlers: {
+        uploadingObjectStorageId: string;
+        onEdit: (image: GeneratedImage, index: number) => void;
+        onDownload: (image: GeneratedImage, index: number) => void;
+        onSaveAsset: (image: GeneratedImage, index: number) => void;
+        onUploadObjectStorage: (image: GeneratedImage, index: number) => void;
+        onOpenDetail: (image: GeneratedImage, index: number, round: Round) => void;
+        onRegenerate: (round: Round) => Promise<void>;
+        interactiveChoiceRoundId?: string;
+        onChoiceReply: (value: string) => void;
+        onOpenModelSettings: (roundId: string) => void;
+        onModelConfigContinue: () => void;
+        modelConfigContinueRoundId: string;
+        onUploadChoice: () => void;
+        onUploadVideoChoice: () => void;
+        onPromptEdit?: (value: string, assistantText?: string, draftedPrompts?: Record<string, string>) => void;
+    },
+): CreationThreadSection[] {
+    const sectionMap = new Map<string, CreationThreadSection["rounds"]>();
+
+    for (const round of activeConversation.rounds) {
+        const label = formatThreadSectionLabel(round.createdAt);
+        const rounds = sectionMap.get(label) || [];
+        const mentionReferences: PromptImageReference[] = round.references.map((reference, index) => ({
+            id: reference.id,
+            name: reference.name,
+            label: imageReferenceLabel(index),
+            previewUrl: reference.dataUrl,
+            kind: "image",
+        }));
+        rounds.push({
+            id: round.id,
+            userText: round.prompt,
+            userContent: mentionReferences.length ? <PromptMentionText text={round.prompt} references={mentionReferences} /> : undefined,
+            userCopyText: formatGenerationStyleMessage(round.prompt, round.generationStyleSnapshots),
+            userAttachments: round.references.length || round.generationStyleSnapshots?.length || round.skill
+                ? (
+                    <div className="space-y-2">
+                        {round.skill ? (
+                            <div className="flex flex-wrap gap-2">
+                                <span className="inline-flex max-w-52 items-center gap-1.5 rounded-full border border-[var(--studio-primary-line)] bg-[var(--studio-primary-soft)] px-2.5 py-1 text-xs font-medium text-[var(--studio-ink)]" title={translate("image.skill", { value0: round.skill.name })}>
+                                    <Sparkles className="size-3.5 shrink-0 text-[var(--studio-action)]" />
+                                    <span className="truncate">{round.skill.name}</span>
+                                </span>
+                            </div>
+                        ) : null}
+                        {renderGenerationStyleSnapshots(round.generationStyleSnapshots)}
+                        {round.references.length ? renderImageRoundReferences(round) : null}
+                    </div>
+                )
+                : undefined,
+            statusText: buildImageStatusText(round),
+            assistantText: buildImageAssistantText(round),
+            activities: round.activities,
+            actionBar: round.choices?.some((choice) => choice.action === ASK_USER_MODEL_CONFIG) && handlers.modelConfigContinueRoundId === round.id
+                ? (
+                    <div className="pt-2">
+                        <Button type="primary" onClick={handlers.onModelConfigContinue}>
+                            {translate("agentActions.continueAfterModelConfig")}
+                        </Button>
+                    </div>
+                )
+                : round.id === handlers.interactiveChoiceRoundId && round.choices?.length
+                ? (
+                    <ChoiceGroup
+                        options={round.choices}
+                        assistantText={buildImageAssistantText(round)}
+                        onReply={handlers.onChoiceReply}
+                        onPromptEdit={handlers.onPromptEdit}
+                        onUpload={handlers.onUploadChoice}
+                        onUploadVideo={handlers.onUploadVideoChoice}
+                        onOpenModelSettings={() => handlers.onOpenModelSettings(round.id)}
+                    />
+                )
+                : round.choices?.length ? <ChoiceHistoryBar choices={round.choices} /> : undefined,
+            resultContent: (
+                <div className="flex flex-wrap items-start gap-3">
+                    {round.results.map((result, index) =>
+                        result.status === "success" && result.image ? (
+                            <ResultCard
+                                key={result.id}
+                                image={result.image}
+                                index={index}
+                                uploadingObjectStorage={handlers.uploadingObjectStorageId === result.image.id}
+                                onEdit={handlers.onEdit}
+                                onDownload={handlers.onDownload}
+                                onSaveAsset={handlers.onSaveAsset}
+                                onUploadObjectStorage={handlers.onUploadObjectStorage}
+                                onOpenDetail={(image, index) => handlers.onOpenDetail(image, index, round)}
+                                onRegenerate={() => void handlers.onRegenerate(round)}
+                            />
+                        ) : result.status === "failed" || result.status === "canceled" ? (
+                            <FailedCard key={result.id} error={result.error || translate("image.generationFailed")} canceled={result.status === "canceled"} />
+                        ) : result.status === "pending" ? (
+                            <ImageGeneratingCard key={result.id} size={round.config.size} />
+                        ) : (
+                            <FailedCard key={result.id} error={translate("generation.imageTaskCompletedWithoutImages")} />
+                        ),
+                    )}
+                </div>
+            ),
+        });
+        sectionMap.set(label, rounds);
+    }
+
+    return Array.from(sectionMap.entries()).map(([label, rounds], index) => ({
+        id: `${activeConversation.id}-${index}`,
+        label,
+        rounds,
+    }));
+}
+
+/** 参考图芯片：有存储键时续签临时地址，加载失败自动续签一次。 */
+function ReferenceChipImage({ reference, previewDisabled }: { reference: ReferenceImage; previewDisabled?: boolean }) {
+    const media = useMediaUrl({ storageKey: reference.storageKey, url: reference.dataUrl, objectStorage: reference.objectStorage, kind: "image" });
+    return (
+        <Image
+            src={media.url || reference.dataUrl}
+            alt={reference.name}
+            width={44}
+            height={44}
+            style={{ objectFit: "cover" }}
+            className="rounded-xl"
+            preview={previewDisabled ? false : { mask: translate("image.preview") }}
+            onError={media.onError}
+        />
+    );
+}
+
+/** 历史参考图缩略图：有存储键时续签临时地址，地址失效自动重试一次。 */
+function ReferenceThumbnail({ reference, title }: { reference: ReferenceImage; title: string }) {
+    const media = useMediaUrl({ storageKey: reference.storageKey, url: reference.dataUrl, objectStorage: reference.objectStorage, kind: "image" });
+    return <img src={media.url || reference.dataUrl} alt={reference.name} title={title} className="size-14 rounded-xl object-cover ring-1 ring-[var(--studio-line)]" onError={media.onError} />;
+}
+
+function renderImageRoundReferences(round: Round) {
+    const visibleReferences = round.references.filter((reference) => Boolean(reference.dataUrl?.trim()));
+    return (
+        <div className="flex flex-wrap gap-2">
+            {visibleReferences.map((reference, index) => (
+                <ReferenceThumbnail key={reference.id} reference={reference} title={imageReferenceLabel(index)} />
+            ))}
+        </div>
+    );
+}
+
+function renderGenerationStyleSnapshots(snapshots?: GenerationStyleSnapshot[]) {
+    if (!snapshots?.length) return null;
+    return (
+        <div className="flex flex-wrap gap-2">
+            {snapshots.map((snapshot) => (
+                <span
+                    key={`generation-style-${snapshot.id}`}
+                    title={snapshot.stylePrompt}
+                    className="inline-flex max-w-52 items-center gap-1.5 rounded-full border border-[var(--studio-primary-line)] bg-[var(--studio-primary-soft)] px-2.5 py-1 text-xs font-medium text-[var(--studio-ink)]"
+                >
+                    <Palette className="size-3.5 shrink-0 text-[var(--studio-action)]" />
+                    <span className="truncate">{snapshot.name}</span>
+                </span>
+            ))}
+        </div>
+    );
+}
+
+function buildImageStatusText(round: Round): string {
+    const pendingCount = round.results.filter((result) => result.status === "pending").length;
+    const successCount = round.results.filter((result) => result.status === "success").length;
+    const failedCount = round.results.filter((result) => result.status === "failed").length;
+    const canceledCount = round.results.filter((result) => result.status === "canceled").length;
+
+    if (pendingCount) {
+        return translate("image.generating");
+    }
+    if (successCount && failedCount) {
+        return translate("image.completedImagesFailed", { value0: successCount, value1: failedCount });
+    }
+    if (successCount) {
+        return canceledCount ? translate("image.completedImagesStopped", { value0: successCount, value1: canceledCount }) : translate("image.completedImages", { value0: successCount });
+    }
+    if (canceledCount) return translate("image.generationStopped");
+    return round.results.length ? translate("image.generationFailed") : "";
+}
+
+function buildImageAssistantText(round: Round): string {
+    // 优先使用 Agent 对话中 LLM 的真实回复
+    if (round.assistantText) return round.assistantText;
+    const pendingCount = round.results.filter((result) => result.status === "pending").length;
+    const successCount = round.results.filter((result) => result.status === "success").length;
+    const failedCount = round.results.filter((result) => result.status === "failed").length;
+    const canceledCount = round.results.filter((result) => result.status === "canceled").length;
+
+    if (pendingCount) return translate("image.generating_43d266");
+    if (successCount && failedCount) return translate("image.completedImagesFailed", { value0: successCount, value1: failedCount });
+    if (successCount) return canceledCount ? translate("image.completedImagesStopped", { value0: successCount, value1: canceledCount }) : translate("image.completedImages", { value0: successCount });
+    if (canceledCount) return translate("image.generationStoppedYouCanGenerateAgain");
+    return round.results.length ? translate("image.generationFailed") : "";
+}
+
+function formatConversationTime(value: number): string {
+    return new Date(value).toLocaleString(currentLanguageTag(), {
+        month: "short",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+    });
+}
+
+function formatThreadSectionLabel(value: number): string {
+    const date = new Date(value);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+
+    if (date >= today && date < tomorrow) {
+        return translate("image.today");
+    }
+    if (date >= yesterday && date < today) {
+        return translate("image.yesterday");
+    }
+    return date.toLocaleDateString(currentLanguageTag(), {
+        month: "long",
+        day: "numeric",
+    });
+}
+
+function ResultCard({
+    image,
+    index,
+    uploadingObjectStorage,
+    onEdit,
+    onDownload,
+    onSaveAsset,
+    onUploadObjectStorage,
+    onOpenDetail,
+    onRegenerate,
+}: {
+    image: GeneratedImage;
+    index: number;
+    uploadingObjectStorage: boolean;
+    onEdit: (image: GeneratedImage, index: number) => void;
+    onDownload: (image: GeneratedImage, index: number) => void;
+    onSaveAsset: (image: GeneratedImage, index: number) => void;
+    onUploadObjectStorage: (image: GeneratedImage, index: number) => void;
+    onOpenDetail?: (image: GeneratedImage, index: number) => void;
+    onRegenerate?: () => void;
+}) {
+    const translate = useTranslation();
+    const [loadedMeta, setLoadedMeta] = useState<{ width: number; height: number; bytes: number }>({ width: image.width, height: image.height, bytes: image.bytes });
+    const [isDownloading, setIsDownloading] = useState(false);
+    // 有存储键时通过接口换取当前临时地址，缩略图加载失败会再续签一次。
+    const media = useMediaUrl({ storageKey: image.storageKey, url: image.dataUrl, objectStorage: image.objectStorage, kind: "image" });
+    const displaySrc = media.url || image.dataUrl;
+    const preview = useMediaFallback(displaySrc);
+    /** 地址失效时先续签一次，续签后仍未恢复则展示占位图。 */
+    const handlePreviewError = () => {
+        media.onError();
+        preview.onError();
+    };
+    const displayWidth = image.width > 0 ? image.width : loadedMeta.width;
+    const displayHeight = image.height > 0 ? image.height : loadedMeta.height;
+    const displayBytes = image.bytes > 0 ? image.bytes : loadedMeta.bytes;
+    const hasSize = displayWidth > 0 && displayHeight > 0;
+    const hasBytes = displayBytes > 0;
+    const previewAspectRatio = hasSize ? `${displayWidth}/${displayHeight}` : "1 / 1";
+    const previewWidth = buildImagePreviewWidth(displayWidth, displayHeight);
+
+    useEffect(() => {
+        let cancelled = false;
+        const picture = new window.Image();
+        picture.onload = () => {
+            if (cancelled) return;
+            setLoadedMeta((current) => ({
+                ...current,
+                width: picture.naturalWidth || current.width,
+                height: picture.naturalHeight || current.height,
+            }));
+        };
+        picture.src = displaySrc;
+
+        if (image.bytes <= 0 && /^https?:\/\//i.test(displaySrc)) {
+            void readImageContentLength(displaySrc).then((bytes) => {
+                if (!cancelled && bytes > 0) {
+                    setLoadedMeta((current) => ({ ...current, bytes }));
+                }
+            });
+        }
+
+        return () => {
+            cancelled = true;
+        };
+    }, [displaySrc, image.bytes]);
+
+    const downloadResult = async () => {
+        if (isDownloading) return;
+        setIsDownloading(true);
+        try {
+            await onDownload(image, index);
+        } finally {
+            setIsDownloading(false);
+        }
+    };
+
+    return (
+        <div
+            className="group w-full overflow-hidden rounded-xl border border-[var(--studio-line)] bg-[var(--studio-panel-solid)] transition hover:-translate-y-0.5 hover:border-[var(--studio-primary-line)] sm:w-auto"
+            style={{ width: `min(100%, ${previewWidth}px)` }}
+        >
+            <div className="relative overflow-hidden bg-[var(--studio-media)]" style={{ aspectRatio: previewAspectRatio }}>
+                {onOpenDetail ? (
+                    <img src={preview.displaySrc} alt={translate("image.result", { value0: index + 1 })} className="block size-full cursor-zoom-in object-contain" onClick={() => onOpenDetail(image, index)} onError={handlePreviewError} />
+                ) : (
+                    <Image src={displaySrc} fallback={MEDIA_FALLBACK_IMAGE} alt={translate("image.result", { value0: index + 1 })} style={{ display: "block", width: "100%", height: "100%", objectFit: "contain" }} onError={media.onError} />
+                )}
+                <div className="absolute left-2 top-2 rounded-full bg-black/60 px-2.5 py-0.5 text-xs font-medium text-white">#{index + 1}</div>
+            </div>
+            <div className="space-y-2.5 border-t border-[var(--studio-line)] px-3 py-2.5">
+                <div className="flex flex-wrap gap-x-2 gap-y-0.5 text-xs text-[var(--studio-muted)]">
+                    {hasSize ? (
+                        <span>
+                            {displayWidth}x{displayHeight}
+                        </span>
+                    ) : null}
+                    {hasBytes ? <span>{formatBytes(displayBytes)}</span> : null}
+                    {image.objectStorage?.url ? (
+                        <Tag className="!m-0 !text-[10px]" color="blue">
+                            {translate("image.cloudStorage")}</Tag>
+                    ) : null}
+                </div>
+                <div className="flex gap-1">
+                    <ShareResultButton mediaId={image.id} storageKey={image.storageKey} />
+                    <Tooltip title={image.objectStorage?.url ? translate("image.copyCloudStorageURL") : translate("image.uploadToCloudStorage")}>
+                        <Button size="small" className="!h-7 !w-7 !min-w-0 !rounded-full !p-0" loading={uploadingObjectStorage} icon={<CloudUpload className="size-3.5" />} onClick={() => void onUploadObjectStorage(image, index)} />
+                    </Tooltip>
+                    <Tooltip title={translate("image.addToAssets")}>
+                        <Button size="small" className="!h-7 !w-7 !min-w-0 !rounded-full !p-0" icon={<FolderPlus className="size-3.5" />} onClick={() => void onSaveAsset(image, index)} />
+                    </Tooltip>
+                    <Tooltip title={translate("image.addReference")}>
+                        <Button size="small" className="!h-7 !w-7 !min-w-0 !rounded-full !p-0" icon={<PenLine className="size-3.5" />} onClick={() => void onEdit(image, index)} />
+                    </Tooltip>
+                    <Tooltip title={translate("image.download")}>
+                        <Button size="small" className="!h-7 !w-7 !min-w-0 !rounded-full !p-0" icon={<Download className="size-3.5" />} loading={isDownloading} disabled={isDownloading} onClick={() => void downloadResult()} />
+                    </Tooltip>
+                    {onRegenerate ? (
+                        <Tooltip title={translate("image.regenerate")}>
+                            <Button aria-label={translate("image.regenerate")} size="small" className="!h-7 !w-7 !min-w-0 !rounded-full !p-0" icon={<RefreshCw className="size-3.5" />} onClick={onRegenerate} />
+                        </Tooltip>
+                    ) : null}
+                </div>
+            </div>
+        </div>
+    );
+}
+
+function buildImagePreviewWidth(width: number, height: number): number {
+    if (width <= 0 || height <= 0) {
+        return IMAGE_PREVIEW_BASE_HEIGHT;
+    }
+    const ratio = width / height;
+    return Math.round(Math.min(IMAGE_PREVIEW_MAX_WIDTH, Math.max(IMAGE_PREVIEW_MIN_WIDTH, IMAGE_PREVIEW_BASE_HEIGHT * ratio)));
+}
+
+async function readImageContentLength(url: string): Promise<number> {
+    try {
+        const response = await fetch(url, { method: "HEAD" });
+        const value = Number(response.headers.get("content-length") || 0);
+        return Number.isFinite(value) ? value : 0;
+    } catch {
+        return 0;
+    }
+}
+
+function FailedCard({ error, canceled }: { error: string; canceled?: boolean }) {
+    const translate = useTranslation();
+    return (
+        <div className="w-full overflow-hidden rounded-xl border border-red-300/40 bg-red-500/10 sm:w-[240px]">
+            <div className="flex aspect-square flex-col items-center justify-center gap-3 p-5 text-center">
+                <div className="rounded-full bg-[var(--studio-panel-solid)] px-3 py-1 text-sm font-medium text-red-500">{canceled ? translate("image.generationStopped") : translate("image.generationFailed")}</div>
+                <Typography.Paragraph ellipsis={{ rows: 3 }} className="!mb-0 !text-xs !text-red-400">
+                    {error}
+                </Typography.Paragraph>
+            </div>
+        </div>
+    );
+}
+
+async function normalizeConversation(raw: Partial<Conversation>): Promise<Conversation> {
+    const rounds = await Promise.all(
+        (raw.rounds || []).map(async (round) => {
+            const normalizedResults = await Promise.all(
+                (round.results || []).map(async (result) => {
+                    if (!result.image) return result;
+                    const storageInfo = await resolveImageStorageInfo(result.image.storageKey, result.image.dataUrl, result.image.objectStorage);
+                    return {
+                        ...result,
+                        image: {
+                            ...result.image,
+                            dataUrl: storageInfo.url,
+                            objectStorage: storageInfo.objectStorage,
+                        },
+                    };
+                }),
+            );
+            const terminalStatus = normalizeImageRoundActivityStatus(normalizedResults);
+            return {
+                ...round,
+                activities: normalizeHistoricalAgentActivities(round.activities, terminalStatus),
+                references: await Promise.all((round.references || []).map(async (reference) => ({
+                    ...reference,
+                    type: referenceMediaType(reference, "image/*"),
+                    dataUrl: await resolveImageUrl(reference.storageKey, referenceMediaUrl(reference)),
+                }))),
+                results: normalizedResults,
+            };
+        }),
+    );
+
+    return {
+        id: raw.id || nanoid(),
+        title: raw.title || translate("image.untitled"),
+        rounds,
+        createdAt: raw.createdAt || Date.now(),
+        updatedAt: raw.updatedAt || raw.createdAt || Date.now(),
+        generationStatus: raw.generationStatus || "idle",
+        generationCompletedAt: raw.generationCompletedAt,
+        generationViewedAt: raw.generationViewedAt,
+    };
+}
+
+function normalizeImageRoundActivityStatus(results: Round["results"]): "success" | "failed" | "canceled" | null {
+    const statuses = results.map((result) => result.status);
+    if (!statuses.length || statuses.includes("pending")) {
+        return null;
+    }
+    if (statuses.includes("success")) {
+        return "success";
+    }
+    if (statuses.includes("canceled") && !statuses.includes("failed")) {
+        return "canceled";
+    }
+    return "failed";
+}

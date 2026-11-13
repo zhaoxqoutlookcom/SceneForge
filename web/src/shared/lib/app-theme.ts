@@ -1,0 +1,221 @@
+import type { ThemeConfig } from "antd";
+import { theme as antdTheme } from "antd";
+
+import { isDarkResolvedTheme, type ResolvedTheme } from "@/shared/lib/theme-preference";
+
+const CSS_VAR_KEY_LIGHT = "novanova-studio-light";
+const CSS_VAR_KEY_DARK = "novanova-studio-dark";
+const CSS_VAR_KEY_PURPLE = "novanova-studio-purple";
+
+/** Logo 品牌色 */
+const BRAND = {
+    light: { primary: "#526f1e", hover: "#648625", active: "#405718", foreground: "#ffffff", soft: "rgba(82,111,30,0.10)", border: "rgba(82,111,30,0.22)" },
+    dark: { primary: "#c7f36b", hover: "#d6ff82", active: "#afda54", foreground: "#11170a", soft: "rgba(199,243,107,0.14)", border: "rgba(199,243,107,0.28)" },
+    purple: { primary: "#b85cf6", hover: "#a78bfa", active: "#6d28d9", foreground: "#ffffff", soft: "rgba(184,92,246,0.16)", border: "rgba(184,92,246,0.30)" },
+};
+
+interface Palette {
+    bg: string;
+    bgElevated: string;
+    border: string;
+    borderLight: string;
+    text: string;
+    textSecondary: string;
+    textMuted: string;
+    fill: string;
+    fillSecondary: string;
+    tableSelected: string;
+    tableSelectedHover: string;
+    tagDefaultBg: string;
+    tagDefaultBorder: string;
+    tagDefaultText: string;
+    layout: string;
+    modal: string;
+    hoverBg: string;
+    shadow: string;
+}
+
+const lightPalette: Palette = {
+    bg: "rgba(255,255,255,0.86)",
+    bgElevated: "#ffffff",
+    border: "#c7cec4",
+    borderLight: "#dce1da",
+    text: "#171a17",
+    textSecondary: "#394037",
+    textMuted: "#596157",
+    fill: "rgba(82,111,30,0.08)",
+    fillSecondary: "#ecefe9",
+    tableSelected: "rgba(82,111,30,0.10)",
+    tableSelectedHover: "rgba(82,111,30,0.16)",
+    tagDefaultBg: "#f4f5f2",
+    tagDefaultBorder: "#dce1da",
+    tagDefaultText: "#394037",
+    layout: "#f4f5f2",
+    modal: "#ffffff",
+    hoverBg: "rgba(255,255,255,0.92)",
+    shadow: "0 8px 24px rgba(30,41,59,0.06)",
+};
+
+const darkPalette: Palette = {
+    bg: "#0c0e0d",
+    bgElevated: "#121512",
+    border: "#363c36",
+    borderLight: "#242824",
+    text: "#f3f6f0",
+    textSecondary: "#c2c9c0",
+    textMuted: "#858d84",
+    fill: "rgba(199,243,107,0.14)",
+    fillSecondary: "#121512",
+    tableSelected: "rgba(199,243,107,0.14)",
+    tableSelectedHover: "rgba(199,243,107,0.20)",
+    tagDefaultBg: "#121512",
+    tagDefaultBorder: "#363c36",
+    tagDefaultText: "#c2c9c0",
+    layout: "#050606",
+    modal: "#0c0e0d",
+    hoverBg: "rgba(17,24,39,0.96)",
+    shadow: "0 16px 36px rgba(2,6,23,0.36)",
+};
+
+/** 紫色主题为暗色系，色值与 globals.css 的 `html[data-theme="purple"]` 变量保持一致。 */
+const purplePalette: Palette = {
+    bg: "#0d0d0f",
+    bgElevated: "#141418",
+    border: "#35353c",
+    borderLight: "#25252a",
+    text: "#f5f5f5",
+    textSecondary: "#d4d4d6",
+    textMuted: "#b8b8b9",
+    fill: "rgba(184,92,246,0.16)",
+    fillSecondary: "#141418",
+    tableSelected: "rgba(184,92,246,0.18)",
+    tableSelectedHover: "rgba(184,92,246,0.26)",
+    tagDefaultBg: "#141418",
+    tagDefaultBorder: "#35353c",
+    tagDefaultText: "#d4d4d6",
+    layout: "#050505",
+    modal: "#0d0d0f",
+    hoverBg: "rgba(26,26,32,0.96)",
+    shadow: "0 18px 42px rgba(0,0,0,0.42)",
+};
+
+const PALETTES: Record<ResolvedTheme, Palette> = {
+    light: lightPalette,
+    dark: darkPalette,
+    purple: purplePalette,
+};
+
+const CSS_VAR_KEYS: Record<ResolvedTheme, string> = {
+    light: CSS_VAR_KEY_LIGHT,
+    dark: CSS_VAR_KEY_DARK,
+    purple: CSS_VAR_KEY_PURPLE,
+};
+
+/**
+ * 生成 Ant Design 主题配置。
+ *
+ * @param resolvedTheme ResolvedTheme 当前生效主题
+ * @return antd ThemeConfig
+ */
+export function getAntThemeConfig(resolvedTheme: ResolvedTheme): ThemeConfig {
+    const isDark = isDarkResolvedTheme(resolvedTheme);
+    const p = PALETTES[resolvedTheme];
+    const brand = BRAND[resolvedTheme];
+    // 暗色主题的主色是浅绿，colorTextLightSolid 被设为深色前景（#11170a），而 Tooltip 的文字色正是
+    // colorTextLightSolid、底色是 colorBgSpotlight：沿用 antd 默认灰底会变成深字配灰底。这里只给暗色主题
+    // 换浅色浮层底（colorBgSpotlight 在 antd 中仅 Tooltip 使用）；浅色与紫色主题文字为白色，保持默认反色底。
+    const spotlightBg = resolvedTheme === "dark" ? "#dfe4d8" : undefined;
+
+    return {
+        algorithm: isDark ? antdTheme.darkAlgorithm : antdTheme.defaultAlgorithm,
+        cssVar: { key: CSS_VAR_KEYS[resolvedTheme] },
+        token: {
+            colorPrimary: brand.primary,
+            colorInfo: isDark ? "#75b7f5" : "#28679b",
+            colorSuccess: isDark ? "#5ed69b" : "#1f7a4d",
+            colorWarning: isDark ? "#f3c969" : "#8a5c00",
+            colorError: isDark ? "#ff7c7c" : "#b42318",
+            colorLink: brand.primary,
+            colorLinkHover: brand.hover,
+            colorLinkActive: brand.active,
+            colorTextLightSolid: brand.foreground,
+            colorBgLayout: p.layout,
+            colorBgContainer: p.bg,
+            colorBgElevated: p.bgElevated,
+            colorBorder: p.border,
+            colorBorderSecondary: p.borderLight,
+            colorText: p.text,
+            colorTextSecondary: p.textSecondary,
+            colorTextTertiary: p.textMuted,
+            colorFillQuaternary: p.fill,
+            colorFillTertiary: p.fillSecondary,
+            colorSplit: p.borderLight,
+            borderRadius: 8,
+            boxShadow: p.shadow,
+            ...(spotlightBg ? { colorBgSpotlight: spotlightBg } : {}),
+        },
+        components: {
+            Button: {
+                primaryShadow: "none",
+                primaryColor: brand.foreground,
+                defaultBg: p.bg,
+                defaultBorderColor: p.border,
+                defaultColor: p.textSecondary,
+                defaultHoverBg: p.hoverBg,
+                defaultHoverColor: p.text,
+                defaultHoverBorderColor: brand.border,
+                borderRadius: 8,
+                controlHeight: 34,
+            },
+            Radio: {
+                buttonSolidCheckedColor: brand.foreground,
+                buttonSolidCheckedBg: brand.primary,
+                buttonSolidCheckedHoverBg: brand.hover,
+                buttonSolidCheckedActiveBg: brand.active,
+            },
+            Segmented: {
+                itemSelectedBg: brand.primary,
+                itemSelectedColor: brand.foreground,
+            },
+            Input: {
+                activeBorderColor: brand.primary,
+                activeShadow: `0 0 0 2px ${brand.soft}`,
+                hoverBorderColor: p.border,
+                borderRadius: 8,
+                colorBgContainer: p.bg,
+            },
+            Modal: {
+                contentBg: p.modal,
+                headerBg: p.modal,
+                footerBg: p.modal,
+                borderRadiusLG: 12,
+            },
+            Table: {
+                rowSelectedBg: p.tableSelected,
+                rowSelectedHoverBg: p.tableSelectedHover,
+                headerBg: p.fillSecondary,
+                headerColor: p.textMuted,
+                borderColor: p.borderLight,
+            },
+            Tag: {
+                defaultBg: p.tagDefaultBg,
+                defaultColor: p.tagDefaultText,
+            },
+            Select: {
+                optionActiveBg: p.fillSecondary,
+                optionSelectedBg: brand.soft,
+                optionSelectedColor: brand.primary,
+            },
+            Menu: {
+                itemActiveBg: brand.soft,
+                itemHoverBg: p.fill,
+                itemSelectedBg: brand.primary,
+                itemSelectedColor: brand.foreground,
+                darkItemBg: p.bg,
+                darkItemHoverBg: brand.soft,
+                darkItemSelectedBg: brand.primary,
+                darkItemSelectedColor: brand.foreground,
+            },
+        },
+    };
+}

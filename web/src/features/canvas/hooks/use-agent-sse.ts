@@ -1,0 +1,553 @@
+"use client";
+import { notifyInsufficientCredits, useInsufficientCreditsStore } from "@/features/credits/insufficient-credits";
+import { translateMessage as translate } from "@/features/locale/translate";
+import { useTranslation } from "@/features/locale/use-translation";
+
+
+import { useLocale } from "next-intl";
+import { useCallback, useEffect, useRef } from "react";
+
+import { agentChat, agentRequestStatus, agentReplayPendingTools, agentSubscribeEvents, agentSubmitToolResult, cancelAgentChat, type AgentAction, type AgentChatHistoryMessage, type AgentEvent, type CreationSettings } from "@/features/canvas/api/agent";
+import { useUserStore } from "@/features/auth/stores/use-user-store";
+import { isTerminalAgentRequestStatus, matchesAgentRequest, shouldApplyAgentQueueStatus, type AgentQueueStatus } from "@/features/chat/agent-event-match";
+import { readAiTaskError } from "@/services/api/server";
+import type { CanvasAgentOp, CanvasAgentSnapshot } from "../utils/canvas-agent-ops";
+import { resolveCanvasAgentTool, type CanvasAgentToolResult } from "../utils/canvas-agent-tools";
+
+type CanvasAgentApplyResult = {
+  snapshot: CanvasAgentSnapshot;
+  result?: CanvasAgentToolResult;
+};
+
+interface UseAgentSSEProps {
+  snapshot: CanvasAgentSnapshot;
+  onApplyOps: (ops: CanvasAgentOp[] | undefined, signal: AbortSignal) => Promise<CanvasAgentApplyResult>;
+  onToolExecute?: () => void;
+  onTextDelta: (messageId: string, delta: string) => void;
+  onThoughtDelta?: (thoughtId: string, delta: string) => void;
+  onThoughtComplete?: (thoughtId: string, durationMs: number) => void;
+  onTaskComplete: (messageId: string, text: string, action?: AgentAction) => void;
+  onCanceled?: (message: string) => void;
+  onPlanCreated?: (planId: string, summary: string, taskCount: number) => void;
+  onPlanTaskStatus?: (planId: string, taskId: string, status: string, message: string) => void;
+  onPromptPrepared?: (planId: string, taskId: string, strategy: "KEEP" | "OPTIMIZE") => void;
+  onQueueStatus?: (status: "queued" | "running") => void;
+  onRequestFinished?: () => void;
+  onError: (message: string) => void;
+}
+
+/**
+ * Agent SSE 通信 Hook。建立 SSE 长连接，处理文本增量、工具执行、任务完成和错误事件。
+ * 画布写操作工具通过 onApplyOps 应用到画布，并将执行结果回传后端继续 Agent Loop。
+ */
+export function useAgentSSE({ snapshot, onApplyOps, onToolExecute, onTextDelta, onThoughtDelta, onThoughtComplete, onTaskComplete, onCanceled, onPlanCreated, onPlanTaskStatus, onPromptPrepared, onQueueStatus, onRequestFinished, onError }: UseAgentSSEProps) {
+    const translate = useTranslation();
+  const locale = useLocale();
+  const subscribedLocale = useRef(locale);
+  const sessionIdRef = useRef<string | undefined>(undefined);
+  const requestIdRef = useRef<string | undefined>(undefined);
+  const eventSourceRef = useRef<EventSource | null>(null);
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const sseEnabledRef = useRef(false);
+  const connectSSERef = useRef<() => void>(() => undefined);
+  const sendingRef = useRef(false);
+  const activeRequestRef = useRef(false);
+  const cancelRequestedRef = useRef(false);
+  const canceledHandledRef = useRef(false);
+  const pendingEventsRef = useRef<AgentEvent[]>([]);
+  const queueStatusRef = useRef<AgentQueueStatus | null>(null);
+  const terminalRequestIdsRef = useRef(new Set<string>());
+  const activeToolControllersRef = useRef(new Map<string, AbortController>());
+  const snapshotRef = useRef(snapshot);
+  const onApplyOpsRef = useRef(onApplyOps);
+  const onToolExecuteRef = useRef(onToolExecute);
+  const onTextDeltaRef = useRef(onTextDelta);
+  const onThoughtDeltaRef = useRef(onThoughtDelta);
+  const onThoughtCompleteRef = useRef(onThoughtComplete);
+  const onTaskCompleteRef = useRef(onTaskComplete);
+  const onCanceledRef = useRef(onCanceled);
+  const onPlanCreatedRef = useRef(onPlanCreated);
+  const onPlanTaskStatusRef = useRef(onPlanTaskStatus);
+  const onPromptPreparedRef = useRef(onPromptPrepared);
+  const onQueueStatusRef = useRef(onQueueStatus);
+  const onRequestFinishedRef = useRef(onRequestFinished);
+  const onErrorRef = useRef(onError);
+  snapshotRef.current = snapshot;
+  onApplyOpsRef.current = onApplyOps;
+  onToolExecuteRef.current = onToolExecute;
+  onTextDeltaRef.current = onTextDelta;
+  onThoughtDeltaRef.current = onThoughtDelta;
+  onThoughtCompleteRef.current = onThoughtComplete;
+  onTaskCompleteRef.current = onTaskComplete;
+  onCanceledRef.current = onCanceled;
+  onPlanCreatedRef.current = onPlanCreated;
+  onPlanTaskStatusRef.current = onPlanTaskStatus;
+  onPromptPreparedRef.current = onPromptPrepared;
+  onQueueStatusRef.current = onQueueStatus;
+  onRequestFinishedRef.current = onRequestFinished;
+  onErrorRef.current = onError;
+
+  const markRequestTerminal = useCallback((requestId?: string) => {
+    if (!requestId) return;
+    const terminalRequestIds = terminalRequestIdsRef.current;
+    if (terminalRequestIds.size >= 128) {
+      const oldestRequestId = terminalRequestIds.values().next().value;
+      if (oldestRequestId) terminalRequestIds.delete(oldestRequestId);
+    }
+    terminalRequestIds.add(requestId);
+  }, []);
+
+  const finishCanceledRequest = useCallback((requestId: string, message: string) => {
+    if (canceledHandledRef.current) return;
+    canceledHandledRef.current = true;
+    markRequestTerminal(requestId);
+    cancelRequestedRef.current = false;
+    activeRequestRef.current = false;
+    queueStatusRef.current = null;
+    activeToolControllersRef.current.forEach((controller) => controller.abort());
+    activeToolControllersRef.current.clear();
+    onCanceledRef.current?.(message);
+  }, [markRequestTerminal]);
+
+  const flushPendingEvents = useCallback((sessionId: string, requestId: string) => {
+    const pendingEvents = pendingEventsRef.current;
+    pendingEventsRef.current = [];
+    const eventSource = eventSourceRef.current;
+    if (!eventSource) return;
+    pendingEvents
+      .filter((event) => matchesAgentRequest(event, sessionId, requestId))
+      .forEach((event) => eventSource.dispatchEvent(new MessageEvent(event.type, { data: JSON.stringify(event) })));
+  }, []);
+
+  const clearReconnectTimer = useCallback(() => {
+    if (reconnectTimerRef.current !== null) {
+      clearTimeout(reconnectTimerRef.current);
+      reconnectTimerRef.current = null;
+    }
+  }, []);
+
+  // connectSSE 不依赖任何回调引用，所有回调通过 ref 访问，保证 SSE 连接只建立一次。
+  const connectSSE = useCallback(() => {
+    clearReconnectTimer();
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close();
+    }
+    const es = agentSubscribeEvents();
+    const creditPromptScope = useInsufficientCreditsStore.getState().scope;
+    eventSourceRef.current = es;
+
+    const readCurrentEvent = (event: MessageEvent): AgentEvent | null => {
+      try {
+        const data: AgentEvent = JSON.parse(event.data);
+        if (data.requestId && terminalRequestIdsRef.current.has(data.requestId)) return null;
+        if (matchesAgentRequest(data, sessionIdRef.current, requestIdRef.current)) return data;
+        if (sendingRef.current && data.requestId) {
+          const pendingEvents = pendingEventsRef.current;
+          if (pendingEvents.length >= 128) pendingEvents.shift();
+          pendingEvents.push(data);
+        }
+        return null;
+      } catch {
+        return null;
+      }
+    };
+
+    es.addEventListener("queue-status", (e: MessageEvent) => {
+      const data = readCurrentEvent(e);
+      if (!data || (data.status !== "queued" && data.status !== "running")) return;
+      if (cancelRequestedRef.current) return;
+      if (!shouldApplyAgentQueueStatus(queueStatusRef.current, data.status)) return;
+      queueStatusRef.current = data.status;
+      activeRequestRef.current = true;
+      onQueueStatusRef.current?.(data.status);
+    });
+
+    // 文本增量事件
+    es.addEventListener("text-delta", (e: MessageEvent) => {
+      const data = readCurrentEvent(e);
+      if (!data) return;
+      if (data.messageId && data.delta) onTextDeltaRef.current(data.messageId, data.delta);
+    });
+
+    // 主Agent思考事件仅更新当前页面的瞬时展示状态。
+    es.addEventListener("thought-delta", (e: MessageEvent) => {
+      const data = readCurrentEvent(e);
+      if (!data) return;
+      if (data.thoughtId && data.thoughtDelta) onThoughtDeltaRef.current?.(data.thoughtId, data.thoughtDelta);
+    });
+
+    es.addEventListener("thought-complete", (e: MessageEvent) => {
+      const data = readCurrentEvent(e);
+      if (!data) return;
+      if (data.thoughtId) onThoughtCompleteRef.current?.(data.thoughtId, data.thoughtDurationMs ?? 0);
+    });
+
+    // 工具执行事件：将工具参数转为画布操作并应用，再回传结果给后端
+    es.addEventListener("tool-execute", (e: MessageEvent) => {
+      const data = readCurrentEvent(e);
+      if (!data) return;
+      if (!data.name || !data.callId) return;
+      const sessionId = data.sessionId;
+      if (!sessionId) return;
+      void (async () => {
+        const controller = new AbortController();
+        activeToolControllersRef.current.set(data.callId!, controller);
+        try {
+          onToolExecuteRef.current?.();
+          const execution = resolveCanvasAgentTool(data.name!, data.arguments);
+          if (!execution) throw new Error(translate("canvas.unsupportedCanvasTool", { value0: data.name! }));
+          let result = execution.result;
+          if (execution.ops.length > 0 && result.ok) {
+            const application = await onApplyOpsRef.current(execution.ops, controller.signal);
+            snapshotRef.current = application.snapshot;
+            result = application.result || result;
+          }
+          if (controller.signal.aborted) return;
+          const requestId = data.requestId;
+          if (!requestId) return;
+          await agentSubmitToolResult({ sessionId, requestId, callId: data.callId!, result });
+        } catch (err) {
+          const canceled = controller.signal.aborted;
+          if (canceled) return;
+          const requestId = data.requestId;
+          if (requestId) {
+            await agentSubmitToolResult({
+              sessionId,
+              requestId,
+              callId: data.callId!,
+              result: {
+                ok: false,
+                message: err instanceof Error ? err.message : translate("canvas.toolExecutionFailed"),
+                data: { error: readAiTaskError(err) },
+              },
+            }).catch(() => undefined);
+          }
+        } finally {
+          activeToolControllersRef.current.delete(data.callId!);
+        }
+      })();
+    });
+
+    // 任务完成事件
+    es.addEventListener("task-complete", (e: MessageEvent) => {
+      const data = readCurrentEvent(e);
+      if (!data) return;
+      activeRequestRef.current = false;
+      queueStatusRef.current = null;
+      markRequestTerminal(data.requestId);
+      onTaskCompleteRef.current(data.messageId || "", data.text || "", data.action);
+    });
+
+    es.addEventListener("canceled", (e: MessageEvent) => {
+      const data = readCurrentEvent(e);
+      if (!data) return;
+      finishCanceledRequest(data.requestId || "", data.text || translate("canvas.generationStopped"));
+    });
+
+    es.addEventListener("tool-cancel", (e: MessageEvent) => {
+      const data = readCurrentEvent(e);
+      if (!data) return;
+      if (!data.callId) return;
+      activeToolControllersRef.current.get(data.callId)?.abort();
+      activeToolControllersRef.current.delete(data.callId);
+    });
+
+    // 展示主Agent计划摘要和确定性执行阶段。
+    es.addEventListener("plan-created", (e: MessageEvent) => {
+      const data = readCurrentEvent(e);
+      if (!data) return;
+      onPlanCreatedRef.current?.(
+        String(data.resultData?.planId || ""),
+        String(data.resultData?.summary || data.text || ""),
+        Number(data.resultData?.taskCount || 0),
+      );
+    });
+
+    es.addEventListener("plan-task-status", (e: MessageEvent) => {
+      const data = readCurrentEvent(e);
+      if (!data) return;
+      onPlanTaskStatusRef.current?.(
+        String(data.resultData?.planId || ""),
+        String(data.resultData?.taskId || data.callId || ""),
+        data.status || "",
+        String(data.resultData?.message || data.text || ""),
+      );
+    });
+
+    es.addEventListener("prompt-prepared", (e: MessageEvent) => {
+      const data = readCurrentEvent(e);
+      if (!data) return;
+      onPromptPreparedRef.current?.(
+        String(data.resultData?.planId || ""),
+        String(data.resultData?.taskId || data.callId || ""),
+        String(data.resultData?.strategy || "KEEP") as "KEEP" | "OPTIMIZE",
+      );
+    });
+
+    // 错误事件
+    es.addEventListener("error", (e: MessageEvent) => {
+      // 浏览器原生 onerror 也会触发 error 监听，e.data 此时为 undefined，避免误解析
+      if (!e.data) return;
+      try {
+        const data = readCurrentEvent(e);
+        if (!data) return;
+        notifyInsufficientCredits(data.systemMessage?.key, data.errorMessage, data.requestId ? `agent:${data.requestId}` : undefined, creditPromptScope);
+        activeRequestRef.current = false;
+        queueStatusRef.current = null;
+        markRequestTerminal(data.requestId);
+        onErrorRef.current(data.errorMessage || translate("canvas.unknownError"));
+      } catch {
+        onErrorRef.current(translate("canvas.unknownError"));
+      }
+    });
+
+    // 连接异常时自动重连
+    es.onerror = (event) => {
+      if (event instanceof MessageEvent && event.data) return;
+      if (!sseEnabledRef.current || eventSourceRef.current !== es || reconnectTimerRef.current !== null) return;
+      reconnectTimerRef.current = setTimeout(() => {
+        reconnectTimerRef.current = null;
+        if (sseEnabledRef.current && eventSourceRef.current === es) {
+          connectSSERef.current();
+        }
+      }, 3000);
+    };
+  }, [clearReconnectTimer, finishCanceledRequest, markRequestTerminal]);
+
+  connectSSERef.current = connectSSE;
+
+  /**
+   * 发送用户消息，携带当前画布快照、引用和选择的模型。
+   * 使用 sendingRef 同步锁防止同一事件循环内重复提交（React setState 异步导致 isRunning 守卫失效）。
+   */
+  const sendMessage = useCallback(
+    async (
+      message: string,
+      references?: { title: string; text: string }[],
+      model?: string,
+      history?: AgentChatHistoryMessage[],
+      generationStyleIdsByType?: { image?: number[]; video?: number[] },
+      generationSettings?: Omit<CreationSettings, "model" | "generationStyleIdsByType">,
+      skillId?: string,
+    ) => {
+      if (sendingRef.current || activeRequestRef.current) return false;
+      sendingRef.current = true;
+      activeRequestRef.current = true;
+      cancelRequestedRef.current = false;
+      canceledHandledRef.current = false;
+      const previousSessionId = sessionIdRef.current;
+      requestIdRef.current = undefined;
+      pendingEventsRef.current = [];
+      queueStatusRef.current = "queued";
+      try {
+        const { settingGraphNodeId, settingGraphSkillSnapshot, ...creationGenerationSettings } = generationSettings || {};
+        const requestCanvasSnapshot = settingGraphNodeId
+          ? buildSettingGraphCanvasSnapshot(snapshotRef.current, settingGraphNodeId)
+          : snapshotRef.current;
+        const { sessionId, requestId, status } = await agentChat({
+          sessionId: previousSessionId,
+          entrySource: "canvas",
+          message,
+          canvasSnapshot: requestCanvasSnapshot as unknown as Record<string, unknown>,
+          references,
+          history,
+          creationSettings: model || generationStyleIdsByType || generationSettings
+            ? { model, generationStyleIdsByType, ...creationGenerationSettings }
+            : undefined,
+          skillId,
+          settingGraphNodeId,
+          settingGraphSkillSnapshot,
+        });
+        sessionIdRef.current = sessionId;
+        requestIdRef.current = requestId;
+        if ((status === "queued" || status === "running") && shouldApplyAgentQueueStatus(queueStatusRef.current, status)) {
+          queueStatusRef.current = status;
+          onQueueStatusRef.current?.(status);
+        } else if (status !== "queued" && status !== "running") {
+          flushPendingEvents(sessionId, requestId);
+          markRequestTerminal(requestId);
+          activeRequestRef.current = false;
+          queueStatusRef.current = null;
+          onRequestFinishedRef.current?.();
+        }
+        if (!isTerminalAgentRequestStatus(status)) {
+          flushPendingEvents(sessionId, requestId);
+        }
+        if (cancelRequestedRef.current && !isTerminalAgentRequestStatus(status)) {
+          try {
+            await cancelAgentChat(sessionId, requestId);
+            finishCanceledRequest(requestId, translate("canvas.generationStopped"));
+          } catch (error) {
+            cancelRequestedRef.current = false;
+            throw error;
+          }
+        }
+      } catch (error) {
+        pendingEventsRef.current = [];
+        activeRequestRef.current = false;
+        queueStatusRef.current = null;
+        throw error;
+      } finally {
+        sendingRef.current = false;
+      }
+      return true;
+    },
+    [finishCanceledRequest, flushPendingEvents, markRequestTerminal],
+  );
+
+  /**
+   * 重置后端 Agent 会话游标，用于前端新建独立对话。
+   * 当前请求仍在排队或运行时不能重置，避免后续 SSE 事件失去请求归属。
+   */
+  const resetSession = useCallback((): boolean => {
+    if (sendingRef.current || activeRequestRef.current) return false;
+    activeToolControllersRef.current.forEach((controller) => controller.abort());
+    activeToolControllersRef.current.clear();
+    cancelRequestedRef.current = false;
+    canceledHandledRef.current = false;
+    sessionIdRef.current = undefined;
+    requestIdRef.current = undefined;
+    pendingEventsRef.current = [];
+    queueStatusRef.current = null;
+    return true;
+  }, []);
+
+  const cancelMessage = useCallback(async (forfeitSubmittedGeneration = false) => {
+    if (!sessionIdRef.current || !requestIdRef.current) {
+      activeToolControllersRef.current.forEach((controller) => controller.abort());
+      activeToolControllersRef.current.clear();
+      cancelRequestedRef.current = true;
+      if (!sendingRef.current) cancelRequestedRef.current = false;
+      return;
+    }
+    try {
+      await cancelAgentChat(sessionIdRef.current, requestIdRef.current, forfeitSubmittedGeneration);
+      activeToolControllersRef.current.forEach((controller) => controller.abort());
+      activeToolControllersRef.current.clear();
+      cancelRequestedRef.current = true;
+      finishCanceledRequest(requestIdRef.current, translate("canvas.generationStopped"));
+    } catch (error) {
+      if (!sendingRef.current) cancelRequestedRef.current = false;
+      throw error;
+    }
+  }, [finishCanceledRequest]);
+
+  /**
+   * 接管一个已在服务端执行的请求：写入会话和请求ID，让后续SSE事件重新匹配本页面。
+   * 页面刷新后用它恢复对进行中任务的订阅。
+   *
+   * @param sessionId String Agent会话ID
+   * @param requestId String 主Agent请求ID
+   * @param status AgentQueueStatus 服务端请求状态
+   */
+  const attachRequest = useCallback((sessionId: string, requestId: string, status: AgentQueueStatus) => {
+    sessionIdRef.current = sessionId;
+    requestIdRef.current = requestId;
+    pendingEventsRef.current = [];
+    queueStatusRef.current = status;
+    activeRequestRef.current = true;
+    cancelRequestedRef.current = false;
+    canceledHandledRef.current = false;
+  }, []);
+
+  /**
+   * 释放已结束请求的接管状态，避免新请求被提交锁拒绝。
+   */
+  const detachRequest = useCallback(() => {
+    activeRequestRef.current = false;
+    queueStatusRef.current = null;
+    pendingEventsRef.current = [];
+    requestIdRef.current = undefined;
+    cancelRequestedRef.current = false;
+    canceledHandledRef.current = false;
+  }, []);
+
+  /**
+   * 读取当前页面正在执行的前端工具调用ID，接管请求时用它避免同一调用被执行两次。
+   *
+   * @return string[] 正在执行的工具调用ID
+   */
+  const readActiveToolCallIds = useCallback(() => Array.from(activeToolControllersRef.current.keys()), []);
+
+  /**
+   * 读取当前页面已接管的请求ID，用于切换接管新请求。
+   *
+   * @return string | undefined 已接管的请求ID
+   */
+  const readAttachedRequestId = useCallback(() => requestIdRef.current, []);
+
+  const token = useUserStore((s) => s.token);
+
+  // 仅登录后建立 SSE 连接，token 变化时自动重连
+  useEffect(() => {
+    if (!token) {
+      sseEnabledRef.current = false;
+      clearReconnectTimer();
+      eventSourceRef.current?.close();
+      eventSourceRef.current = null;
+      return;
+    }
+    sseEnabledRef.current = true;
+    connectSSE();
+    return () => {
+      sseEnabledRef.current = false;
+      clearReconnectTimer();
+      eventSourceRef.current?.close();
+      activeToolControllersRef.current.forEach((controller) => controller.abort());
+      activeToolControllersRef.current.clear();
+    };
+  }, [token, clearReconnectTimer, connectSSE]);
+
+  // 切换语言只重建事件连接，保持请求游标和正在执行的前端工具。
+  useEffect(() => {
+    if (subscribedLocale.current === locale) return;
+    subscribedLocale.current = locale;
+    if (!sseEnabledRef.current) return;
+    connectSSERef.current();
+    const source = eventSourceRef.current;
+    source?.addEventListener("open", () => {
+      const requestId = requestIdRef.current;
+      const sessionId = sessionIdRef.current;
+      if (!requestId || !sessionId || !activeRequestRef.current) return;
+      // 重连后查询终态并补放尚未执行的工具；已经执行中的工具保持原样。
+      void agentRequestStatus(requestId).then((result) => {
+        if (requestIdRef.current !== requestId || eventSourceRef.current !== source) return;
+        if (result.status === "queued" || result.status === "running") {
+          return agentReplayPendingTools({ sessionId, requestId, activeToolCallIds: Array.from(activeToolControllersRef.current.keys()) });
+        }
+        if (result.status === "canceled") finishCanceledRequest(requestId, result.message);
+        else {
+          activeRequestRef.current = false;
+          queueStatusRef.current = null;
+          markRequestTerminal(requestId);
+          if (result.status === "failed" || result.status === "interrupted") onErrorRef.current(result.message);
+          onRequestFinishedRef.current?.();
+        }
+      }).catch((error) => console.error("切换语言后恢复Agent订阅失败", error));
+    }, { once: true });
+  }, [locale, finishCanceledRequest, markRequestTerminal]);
+
+  return { sendMessage, cancelMessage, resetSession, attachRequest, detachRequest, readActiveToolCallIds, readAttachedRequestId };
+}
+
+/** 设定图生成只向 Agent 发送目标节点及其直接引用节点，避免把整张大型画布历史注入模型导致请求超时。 */
+function buildSettingGraphCanvasSnapshot(snapshot: CanvasAgentSnapshot, targetNodeId: string): CanvasAgentSnapshot {
+  const sourceNodeIds = snapshot.connections
+    .filter((connection) => connection.target.nodeId === targetNodeId)
+    .map((connection) => connection.source.nodeId);
+  const allowedNodeIds = new Set([targetNodeId, ...sourceNodeIds]);
+  return {
+    ...snapshot,
+    nodes: snapshot.nodes.filter((node) => allowedNodeIds.has(node.id)).map((node) => {
+      if (node.kind === "image" && node.content.source.startsWith("data:")) {
+        return { ...node, content: { ...node.content, source: "[图片参考]" } };
+      }
+      if (node.kind === "text" && node.content.text.length > 12000) {
+        return { ...node, content: { ...node.content, text: `${node.content.text.slice(0, 12000)}\n[文本已截断]` } };
+      }
+      return node;
+    }),
+    connections: snapshot.connections.filter((connection) => allowedNodeIds.has(connection.source.nodeId) && allowedNodeIds.has(connection.target.nodeId)),
+    selectedNodeIds: snapshot.selectedNodeIds.filter((nodeId) => allowedNodeIds.has(nodeId)),
+  };
+}

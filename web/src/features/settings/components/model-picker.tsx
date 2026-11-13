@@ -1,0 +1,135 @@
+"use client";
+import { translateMessage as translate } from "@/features/locale/translate";
+import { useTranslation } from "@/features/locale/use-translation";
+
+
+import { useEffect, useId, useMemo, useState } from "react";
+import { Clapperboard } from "lucide-react";
+import { App } from "antd";
+
+import { Select, SelectContent, SelectItem, SelectTrigger } from "@/shared/components/ui/select";
+import { cn } from "@/shared/lib/utils";
+import { modelOptionLabel, modelOptionLabelWithRealName, modelOptionName, resolveModelRequestConfig, selectableModelsByCapability, type AiConfig, type ModelCapability } from "@/features/settings/stores/use-config-store";
+
+import { MODEL_ICON_MONOCHROME_KEYS, isMonochromeModelIcon, resolveModelIcon, resolveModelIconByKey } from "./model-icon";
+
+const MODEL_PICKER_OPEN_EVENT = "model-picker-open";
+
+type ModelPickerProps = {
+    config: AiConfig;
+    value?: string;
+    onChange: (model: string) => void;
+    capability?: ModelCapability;
+    className?: string;
+    fullWidth?: boolean;
+    placeholder?: string;
+    onMissingConfig?: () => void;
+    modelOptions?: string[];
+    showRealName?: boolean;
+};
+
+export function ModelPicker({ config, value, onChange, capability, className, fullWidth = false, placeholder = translate("settings.selectModel"), onMissingConfig, modelOptions, showRealName = false }: ModelPickerProps) {
+    const translate = useTranslation();
+    const { message } = App.useApp();
+    const pickerId = useId();
+    const [open, setOpen] = useState(false);
+    const current = value || "";
+    const options = useMemo(() => createModelOptions(config, capability, value, modelOptions), [capability, config, modelOptions, value, translate.locale]);
+    const modelLabel = (model: string) => (showRealName ? modelOptionLabelWithRealName(config, model) : modelOptionLabel(config, model));
+
+    useEffect(() => {
+        const closeWhenOtherPickerOpens = (event: Event) => {
+            const activePickerId = event instanceof CustomEvent ? event.detail : "";
+            if (activePickerId !== pickerId) setOpen(false);
+        };
+        window.addEventListener(MODEL_PICKER_OPEN_EVENT, closeWhenOtherPickerOpens);
+        return () => window.removeEventListener(MODEL_PICKER_OPEN_EVENT, closeWhenOtherPickerOpens);
+    }, [pickerId]);
+
+    const handleOpenChange = (nextOpen: boolean) => {
+        if (nextOpen && !options.length) {
+            if (onMissingConfig) onMissingConfig();
+            else message.warning(translate("settings.contactAdministratorForModel"));
+            return;
+        }
+        if (nextOpen) {
+            window.dispatchEvent(new CustomEvent(MODEL_PICKER_OPEN_EVENT, { detail: pickerId }));
+        }
+        setOpen(nextOpen);
+    };
+
+    return (
+        <Select open={open} value={current} onOpenChange={handleOpenChange} onValueChange={onChange}>
+            <SelectTrigger
+                className={cn(
+                    "canvas-composer-model-picker h-8 w-fit max-w-full gap-2 rounded-full border border-input bg-transparent px-3 text-sm font-normal shadow-sm transition-colors",
+                    fullWidth ? "w-full min-w-0 justify-start" : "min-w-[9rem] justify-start",
+                    "data-[state=open]:border-ring data-[state=open]:ring-2 data-[state=open]:ring-ring/20",
+                    className,
+                )}
+                onMouseDown={(event) => event.stopPropagation()}
+                onPointerDown={(event) => event.stopPropagation()}
+                title={current ? modelLabel(current) : placeholder}
+            >
+                <ModelIcon config={config} model={current} />
+                <span className="canvas-model-picker-text min-w-0 flex-1 truncate text-left">{current ? modelLabel(current) : placeholder}</span>
+            </SelectTrigger>
+            {open ? (
+                <SelectContent
+                    data-canvas-no-zoom
+                    className="z-[1200] w-80 max-w-[calc(100vw-24px)] rounded-xl border border-border/70 bg-popover p-1 shadow-xl"
+                    position="popper"
+                    align="start"
+                    side="bottom"
+                    sideOffset={6}
+                    onPointerDown={(event) => event.stopPropagation()}
+                    onMouseDown={(event) => event.stopPropagation()}
+                >
+                    {options.length ? (
+                        options.map((model) => <SelectItem key={model} value={model} textValue={modelLabel(model)} label={<ModelLabel config={config} model={model} showRealName={showRealName} />} />)
+                    ) : (
+                        <SelectItem value="__empty__" disabled textValue={translate("settings.contactAdministratorForModel")}>
+                            {translate("settings.contactAdministratorForModel")}
+                        </SelectItem>
+                    )}
+                </SelectContent>
+            ) : null}
+        </Select>
+    );
+}
+
+function createModelOptions(config: AiConfig, capability: ModelCapability | undefined, value: string | undefined, modelOptions?: string[]) {
+    const retainedLocalValue = config.channelMode === "local" && !capability ? [value] : [];
+    const configured = selectableModelsByCapability(config, capability);
+    const filtered = modelOptions ? configured.filter((model) => modelOptions.includes(model)) : configured;
+    return Array.from(new Set([...retainedLocalValue, ...filtered].filter(isFilledText)));
+}
+
+function isFilledText(value: string | undefined): value is string {
+    return Boolean(value?.trim());
+}
+
+function ModelLabel({ config, model, showRealName }: { config: AiConfig; model: string; showRealName: boolean }) {
+    return (
+        <span className="flex min-w-0 items-center gap-2">
+            <ModelIcon config={config} model={model} />
+            <span className="truncate">{showRealName ? modelOptionLabelWithRealName(config, model) : modelOptionLabel(config, model)}</span>
+        </span>
+    );
+}
+
+/** 模型图标：优先使用管理端配置的图标，其次按模型名和接口格式自动匹配。 */
+export function ModelIcon({ config, model }: { config: AiConfig; model: string }) {
+    const modelName = model ? modelOptionName(model) : "";
+    const apiFormat = model ? resolveModelRequestConfig(config, model).apiFormat : undefined;
+    const configuredKey = model ? config.modelIcons?.[model] : undefined;
+    const icon = configuredKey ? resolveModelIconByKey(configuredKey) : model ? resolveModelIcon(modelName, apiFormat) : "";
+    const monochrome = configuredKey ? MODEL_ICON_MONOCHROME_KEYS.has(configuredKey) : model ? isMonochromeModelIcon(modelName, apiFormat) : false;
+    const qwenIcon = icon === "/icons/qwen.svg";
+
+    return (
+        <span className={cn("model-picker-icon flex size-5 shrink-0 items-center justify-center rounded-md", monochrome && "model-picker-icon-monochrome", qwenIcon && "model-picker-icon-qwen")}>
+            {icon ? <img src={icon} alt="" className={cn("size-4", qwenIcon && "model-icon-qwen")} /> : <Clapperboard className="size-4 opacity-70" />}
+        </span>
+    );
+}

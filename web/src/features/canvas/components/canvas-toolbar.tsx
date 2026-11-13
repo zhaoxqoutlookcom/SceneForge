@@ -1,0 +1,185 @@
+"use client";
+
+import { translateMessage as translate } from "@/features/locale/translate";
+import { useTranslation } from "@/features/locale/use-translation";
+import type { ReactNode } from "react";
+import { Button, Tooltip } from "antd";
+import { Box, Eraser, FolderOpen, Frame, Hand, Image as ImageIcon, Redo2, Trash2, Type, Undo2, Upload, AudioLines, Video } from "lucide-react";
+
+import type { CanvasTheme } from "@/shared/lib/canvas-theme";
+import type { CanvasBackgroundNode } from "../types";
+import { useCanvasTheme } from "./canvas-theme-provider";
+
+type ToolButtonStyle = {
+    background?: string;
+    color?: string;
+    opacity?: number;
+};
+
+type CanvasToolbarProps = {
+    selectedCount: number;
+    canUndo: boolean;
+    canRedo: boolean;
+    onAddImage: () => void;
+    onAddVideo: () => void;
+    onAddAudio: () => void;
+    onAddText: () => void;
+    onAddBackground: () => void;
+    onAddDirectorDesk: () => void;
+    onUndo: () => void;
+    onRedo: () => void;
+    onUpload: () => void;
+    onDelete: () => void;
+    onClear: () => void;
+    onDeselect: () => void;
+    onOpenMyAssets: () => void;
+    selectedBackground?: CanvasBackgroundNode | null;
+    onBackgroundTitleChange?: (nodeId: string, title: string) => void;
+    onBackgroundColorChange?: (nodeId: string, color: string) => void;
+};
+
+type ToolbarAction = {
+    key: string;
+    label: string;
+    icon: ReactNode;
+    onClick?: () => void;
+    disabled?: boolean;
+    danger?: boolean;
+    active?: boolean;
+    dividerBefore?: boolean;
+};
+
+export function CanvasToolbar(props: CanvasToolbarProps) {
+    const theme = useCanvasTheme();
+    const toolActions = buildToolbarActions(props);
+
+    return (
+        <div
+            className="absolute bottom-5 left-1/2 z-50 flex h-10 max-w-[calc(100vw-2rem)] -translate-x-1/2 items-center gap-0.5 overflow-x-auto rounded-xl px-1 thin-scrollbar [&>*]:shrink-0"
+            style={{ background: theme.toolbar.panel, boxShadow: "0 10px 30px rgba(28,25,23,.10)" }}
+        >
+            {props.selectedBackground ? <BackgroundToolbarSettings node={props.selectedBackground} onTitleChange={props.onBackgroundTitleChange} onColorChange={props.onBackgroundColorChange} /> : null}
+            {toolActions.map((action) => (
+                <ToolbarActionItem key={action.key} action={action} />
+            ))}
+        </div>
+    );
+}
+
+function BackgroundToolbarSettings({ node, onTitleChange, onColorChange }: { node: CanvasBackgroundNode; onTitleChange?: (nodeId: string, title: string) => void; onColorChange?: (nodeId: string, color: string) => void }) {
+    const translate = useTranslation();
+    const theme = useCanvasTheme();
+    const colors = ["var(--studio-surface-raised)", "var(--studio-surface-hover)", "var(--studio-line)", "var(--studio-info)", "var(--studio-success)", "var(--studio-warning)"];
+    return (
+        <div className="mr-1 flex items-center gap-1.5 border-r pr-2" style={{ borderColor: theme.toolbar.border }}>
+            <label className="sr-only" htmlFor="canvas-background-title">{translate("canvas.backgroundName")}</label>
+            <input id="canvas-background-title" className="h-8 w-28 rounded-md border bg-transparent px-2 text-xs outline-none focus-visible:ring-2" style={{ borderColor: theme.toolbar.border, color: theme.node.text, outlineColor: theme.node.activeStroke }} value={node.title} onChange={(event) => onTitleChange?.(node.id, event.target.value)} onBlur={(event) => onTitleChange?.(node.id, event.target.value.trim() || translate("canvas.background"))} onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }} />
+            <div className="flex items-center gap-1" role="group" aria-label={translate("canvas.backgroundColor")}>
+                {colors.map((color) => {
+                    const label = translate("canvas.setBackgroundColor", { value0: color });
+                    return (
+                        <Tooltip key={color} title={label} placement="top">
+                            <button type="button" aria-label={label} className="size-5 rounded-full border transition-transform hover:scale-110 focus-visible:ring-2" style={{ background: color, borderColor: node.backgroundColor === color ? theme.node.activeStroke : theme.toolbar.border, outlineColor: theme.node.activeStroke }} onClick={() => onColorChange?.(node.id, color)} />
+                        </Tooltip>
+                    );
+                })}
+            </div>
+        </div>
+    );
+}
+
+function buildToolbarActions(props: CanvasToolbarProps): ToolbarAction[] {
+    const actions: ToolbarAction[] = [
+        { key: "move", label: translate("canvas.moveSelect"), icon: <Hand className="size-4" />, active: !props.selectedCount, onClick: props.onDeselect },
+        { key: "undo", label: translate("canvas.undo"), icon: <Undo2 className="size-4" />, disabled: !props.canUndo, onClick: props.onUndo },
+        { key: "redo", label: translate("canvas.redo"), icon: <Redo2 className="size-4" />, disabled: !props.canRedo, onClick: props.onRedo, dividerBefore: false },
+        { key: "text", label: translate("canvas.text_dd8186"), icon: <Type className="size-4" />, dividerBefore: true, onClick: props.onAddText },
+        { key: "image", label: translate("canvas.image"), icon: <ImageIcon className="size-4" />, onClick: props.onAddImage },
+        { key: "audio", label: translate("canvas.audio"), icon: <AudioLines className="size-4" />, onClick: props.onAddAudio },
+        { key: "video", label: translate("canvas.video"), icon: <Video className="size-4" />, onClick: props.onAddVideo },
+        { key: "director-desk", label: translate("canvas.3DDirectorDesk"), icon: <Box className="size-4" />, onClick: props.onAddDirectorDesk },
+        { key: "background", label: translate("canvas.background"), icon: <Frame className="size-4" />, onClick: props.onAddBackground },
+        { key: "upload", label: translate("canvas.uploadAssets"), icon: <Upload className="size-4" />, onClick: props.onUpload },
+        { key: "assets", label: translate("canvas.myAssets"), icon: <FolderOpen className="size-4" />, dividerBefore: true, onClick: props.onOpenMyAssets },
+    ];
+
+    if (props.selectedCount) {
+        actions.push({
+            key: "delete",
+            label: translate("canvas.deleteSelected_53f101", { value0: props.selectedCount }),
+            icon: <Trash2 className="size-4" />,
+            dividerBefore: true,
+            danger: true,
+            onClick: props.onDelete,
+        });
+    }
+
+    actions.push({
+        key: "clear",
+        label: translate("canvas.clearCanvas"),
+        icon: <Eraser className="size-4" />,
+        dividerBefore: true,
+        danger: true,
+        onClick: props.onClear,
+    });
+
+    return actions;
+}
+
+function ToolbarActionItem({ action }: { action: ToolbarAction }) {
+    const theme = useCanvasTheme();
+
+    return (
+        <>
+            {action.dividerBefore ? <ToolbarDivider /> : null}
+            <Tooltip title={action.label} placement="top" mouseEnterDelay={0.4}>
+                <Button
+                    type="text"
+                    aria-label={action.label}
+                    className="!h-8 !w-8 !min-w-8 !p-0 transition-colors"
+                    disabled={action.disabled}
+                    style={resolveToolbarButtonStyle(action, theme)}
+                    icon={action.icon}
+                    onClick={action.onClick}
+                    onMouseEnter={(event) => applyToolbarHover(event.currentTarget, action, theme)}
+                    onMouseLeave={(event) => clearToolbarHover(event.currentTarget)}
+                />
+            </Tooltip>
+        </>
+    );
+}
+
+function ToolbarDivider() {
+    const theme = useCanvasTheme();
+    return <div className="mx-1 h-5 w-px" style={{ background: theme.toolbar.border }} />;
+}
+
+function resolveToolbarButtonStyle(action: ToolbarAction, theme: CanvasTheme): ToolButtonStyle {
+    if (action.active) {
+        return {
+            background: theme.toolbar.activeBg,
+            color: theme.toolbar.activeText,
+        };
+    }
+    if (action.disabled) {
+        return {
+            color: theme.toolbar.item,
+            opacity: 0.3,
+        };
+    }
+    return {
+        color: action.danger ? "#f87171" : theme.toolbar.item,
+    };
+}
+
+function applyToolbarHover(element: HTMLElement, action: ToolbarAction, theme: CanvasTheme) {
+    if (action.disabled || action.active) return;
+    element.style.background = theme.toolbar.itemHover;
+    if (!action.danger) {
+        element.style.color = theme.toolbar.activeText;
+    }
+}
+
+function clearToolbarHover(element: HTMLElement) {
+    element.style.background = "transparent";
+}

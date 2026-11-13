@@ -1,0 +1,19 @@
+import { AudioNode } from "./audio-node";
+import { ImageNode } from "./image-node";
+import { VideoNode } from "./video-node";
+import { TextNode } from "./text-node";
+import { StoryboardNode } from "./storyboard-node";
+import { VideoCompositionNode } from "./video-composition-node";
+import { BackgroundNode } from "./background-node";
+import { DirectorDeskNode } from "./director-desk-node";
+
+export const nodeTypes = {
+  audio: AudioNode,
+  image: ImageNode,
+  video: VideoNode,
+  text: TextNode,
+  storyboard: StoryboardNode,
+  videoComposition: VideoCompositionNode,
+  directorDesk: DirectorDeskNode,
+  background: BackgroundNode,
+};

@@ -1,0 +1,156 @@
+"use client";
+import { currentLanguageTag } from "@/features/locale/translate";
+
+import { useTranslation } from "@/features/locale/use-translation";
+
+
+import { type CSSProperties, useEffect, useState } from "react";
+import type { MenuProps } from "antd";
+import { Bell, Keyboard, LogOut, UserCircle, Users } from "lucide-react";
+import { App, Badge, Dropdown, Popover } from "antd";
+import Link from "@/shared/lib/team-navigation";
+
+import { GitHubLink } from "@/features/app-shell/components/github-link";
+import { canvasThemes } from "@/shared/lib/canvas-theme";
+import { useThemeStore } from "@/features/theme/stores/use-theme-store";
+import { logoutCurrentUser } from "@/services/api/server";
+import { useNotificationStore } from "@/features/notification/stores/use-notification-store";
+import { NotificationDetailModal } from "@/features/notification/components/notification-detail-modal";
+import { InvitationNotificationItem } from "@/features/notification/components/invitation-notification-item";
+import { canManageCurrentSpace, useTeamStore } from "@/features/team/stores/use-team-store";
+import { useUserStore } from "@/features/auth/stores/use-user-store";
+import { confirmPageNavigation } from "@/shared/lib/navigation-history-guard";
+
+type UserStatusActionsProps = {
+    variant?: "default" | "canvas";
+    onOpenShortcuts?: () => void;
+};
+
+export function UserStatusActions({ variant = "default", onOpenShortcuts }: UserStatusActionsProps) {
+    const translate = useTranslation();
+    const { message } = App.useApp();
+    const user = useUserStore((state) => state.user);
+    const clearSession = useUserStore((state) => state.clearSession);
+    const { notifications, invitations, unreadCount, loadNotifications } = useNotificationStore();
+    const [detailNotification, setDetailNotification] = useState<typeof notifications[number] | null>(null);
+    const resolvedTheme = useThemeStore((state) => state.resolvedTheme);
+    const canvasTheme = canvasThemes[resolvedTheme];
+    const naturalIconClass = "inline-flex size-7 shrink-0 items-center justify-center text-[var(--studio-muted)] transition hover:text-[var(--studio-ink)] [&_svg]:size-4";
+    const iconStyle: CSSProperties | undefined = variant === "canvas" ? { color: canvasTheme.node.text } : undefined;
+    const gitHubClassName = "size-7 text-base";
+    const gitHubStyle = iconStyle;
+    const showCanvasSecondaryActions = variant !== "canvas";
+
+    useEffect(() => {
+        if (user) void loadNotifications();
+    }, [user, loadNotifications]);
+
+    const logout = async () => {
+        if (!await confirmPageNavigation()) return;
+        try {
+            await logoutCurrentUser();
+        } catch {
+            // 后端使用无状态 Token，退出登录以清理本地会话为准。
+        }
+        clearSession();
+        message.success(translate("appShell.signedOut"));
+    };
+    const userMenuItems: MenuProps["items"] = user
+        ? [
+              {
+                  key: "profile",
+                  disabled: true,
+                  label: (
+                      <div className="max-w-56 py-1">
+                          <div className="truncate text-sm font-medium">{user.displayName}</div>
+                          <div className="studio-caption mt-1 truncate text-xs">{user.email}</div>
+                      </div>
+                  ),
+              },
+              ...(canManageCurrentSpace()
+                  ? [
+                        {
+                            key: "adminSystem",
+                            icon: <Users className="size-4" />,
+                            label: <Link href="/admin/system">{translate("appShell.systemManagement")}</Link>,
+                        },
+                    ]
+                  : []),
+              {
+                  key: "logout",
+                  icon: <LogOut className="size-4" />,
+                  label: translate("appShell.signOut"),
+                  onClick: () => void logout(),
+              },
+          ]
+        : [];
+
+    const notificationContent = (
+        <div className="w-80">
+            <div className="border-b border-[var(--studio-line)] px-4 py-2.5 text-sm font-semibold text-[var(--studio-ink)]">
+                {translate("appShell.announcements")}{unreadCount > 0 ? <span className="ml-2 text-xs font-normal text-[var(--studio-primary)]">{unreadCount} {translate("appShell.unread")}</span> : null}
+            </div>
+            <div className="max-h-80 overflow-y-auto">
+                {invitations.length === 0 && notifications.length === 0 ? (
+                    <div className="studio-caption px-4 py-8 text-center text-xs">{translate("appShell.noAnnouncements")}</div>
+                ) : (
+                    <>
+                        {invitations.map((invitation) => (
+                            <InvitationNotificationItem key={invitation.id} invitation={invitation} />
+                        ))}
+                        {notifications.map((n) => (
+                            <button
+                                key={n.id}
+                                type="button"
+                                className={`block w-full border-b border-[var(--studio-line)] px-4 py-3 text-left transition hover:bg-[var(--studio-surface-hover)] ${!n.read ? "bg-[var(--studio-primary-soft)]" : ""}`}
+                                onClick={() => setDetailNotification(n)}
+                            >
+                                <div className="flex items-start justify-between gap-2">
+                                    <span className="studio-title text-sm font-medium">{n.title}</span>
+                                    {!n.read ? <span className="mt-0.5 size-2 shrink-0 rounded-full bg-[var(--studio-primary)]" /> : null}
+                                </div>
+                                {n.content ? <div className="studio-subtitle mt-1 text-xs leading-5 line-clamp-2">{n.content}</div> : null}
+                                <div className="studio-caption mt-1 text-[10px]">{n.publishedAt ? new Date(n.publishedAt).toLocaleString(currentLanguageTag()) : n.createdAt ? new Date(n.createdAt).toLocaleString(currentLanguageTag()) : ""}</div>
+                            </button>
+                        ))}
+                    </>
+                )}
+            </div>
+        </div>
+    );
+
+    return (
+        <>
+            <NotificationDetailModal notification={detailNotification} onClose={() => setDetailNotification(null)} />
+            <div className="inline-flex shrink-0 items-center gap-1">
+                <GitHubLink className={`${gitHubClassName} bg-transparent hover:bg-transparent`} style={gitHubStyle} />
+                {onOpenShortcuts ? (
+                    <button type="button" className={naturalIconClass} style={iconStyle} onClick={onOpenShortcuts} aria-label={translate("appShell.keyboardShortcuts")} title={translate("appShell.keyboardShortcuts")}>
+                        <Keyboard className="size-4" />
+                    </button>
+                ) : null}
+                {showCanvasSecondaryActions && user ? (
+                    <Popover placement="bottomRight" content={notificationContent} trigger="click" arrow={false} onOpenChange={(open) => { if (open) void loadNotifications(); }}>
+                        <button type="button" className={naturalIconClass} style={iconStyle} aria-label={translate("appShell.announcements_069c0e")} title={translate("appShell.announcements_069c0e")}>
+                            <Badge count={unreadCount} size="small" offset={[2, -2]}>
+                                <Bell className="size-4" />
+                            </Badge>
+                        </button>
+                    </Popover>
+                ) : null}
+                {showCanvasSecondaryActions && user ? (
+                    <Dropdown
+                        trigger={["click"]}
+                        menu={{
+                            items: userMenuItems,
+                        }}
+                    >
+                        <button type="button" className={naturalIconClass} style={iconStyle} aria-label={translate("appShell.userMenu")} title={user.displayName}>
+                            <UserCircle className="size-4" />
+                        </button>
+                    </Dropdown>
+                ) : null}
+            </div>
+        </>
+    );
+}

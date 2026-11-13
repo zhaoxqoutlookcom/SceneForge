@@ -1,0 +1,37 @@
+# 系统与编辑器
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.iml
+*.swp
+*~
+
+# 本地环境与密钥（仅保留 *.example）
+.env
+.env.*
+!.env.example
+!**/.env.example
+web/.env.local
+web/.env*.local
+
+# 前端构建与依赖
+web/node_modules/
+web/.next/
+web/out/
+web/coverage/
+web/.turbo/
+web/.pnpm-store/
+
+# 服务端构建
+server/target/
+server/.mvn/wrapper/maven-wrapper.jar
+
+# Docker 数据卷与运行日志
+volume/
+logs/
+
+# 杂项
+*.log
+*.tmp
+.cache/

@@ -1,0 +1,14 @@
+{
+    "openCanvas": "Open canvas",
+    "chooseAnOption": "Choose an option",
+    "generateVideoWithTheseImages": "Generate video with these images",
+    "adjustPrompt": "Adjust prompt",
+    "editPromptAndRegenerate": "Edit prompt and regenerate",
+    "confirmGeneration": "Confirm generation",
+    "confirmDurationSettings": "Confirm",
+    "askUserModelConfig": "Set model",
+    "askUserConfirm": "Confirm",
+    "askUserUploadImage": "Upload image",
+    "askUserUploadVideo": "Upload video",
+    "continueAfterModelConfig": "Continue"
+}

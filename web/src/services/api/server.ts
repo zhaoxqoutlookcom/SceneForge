@@ -1,0 +1,2173 @@
+"use client";
+
+import { creditAmount, creditText } from "@/shared/lib/credit-amounts";
+
+import type { CreditAmount } from "@/shared/lib/credit-amounts";
+import type { ImageSizeMappings } from "@/features/generation/lib/image-size-mappings";
+import { useTeamStore } from "@/features/team/stores/use-team-store";
+import { notifyInsufficientCredits, useInsufficientCreditsStore } from "@/features/credits/insufficient-credits";
+import { notifyStorageCapacityChanged } from "@/features/storage/capacity-events";
+import { translateMessage as translate } from "@/features/locale/translate";
+
+import { currentWebsiteLocale, currentLanguageTag } from "@/features/locale/translate";
+import { useLanguageStore } from "@/features/locale/language-store";
+import type { ObjectStorageConfig, ObjectStorageFile } from "@/shared/types/object-storage";
+import { getAuthToken, useUserStore, type ServerUserProfile } from "@/features/auth/stores/use-user-store";
+import type { ApiCallFormat, CustomModelGroupConfig, ImageBillingConfiguration, ModelCreditUnit, VideoBillingConfiguration, VideoGenerationConstraints, VideoGenerationMode } from "@/features/settings/stores/use-config-store";
+
+type ApiResponse<T> = {
+    code: number;
+    data: T;
+    msg: string;
+};
+
+/** 服务端业务错误，保留HTTP状态和业务错误码供并发冲突等场景判断。 */
+export class ServerApiError extends Error {
+    readonly status: number;
+    readonly messageKey: string | null;
+    readonly code: number;
+
+    constructor(message: string, status: number, code: number, messageKey: string | null = null) {
+        super(message);
+        this.name = "ServerApiError";
+        this.status = status;
+        this.messageKey = messageKey;
+        this.code = code;
+    }
+}
+
+export { ServerApiError as ServerRequestError };
+
+export type ServerMediaInput = {
+    kind: string;
+    storageKey?: string;
+    sourceUrl?: string;
+    mimeType?: string;
+    bytes?: number;
+    width?: number;
+    height?: number;
+    durationMs?: number;
+    metadata?: unknown;
+    /** 为 true 时服务端按高质量策略压缩图片，技能封面上传使用。 */
+    compress?: boolean;
+};
+
+export type ServerMediaInfo = {
+    storageKey: string;
+    url: string;
+    sourceUrl?: string;
+    bytes: number;
+    mimeType: string;
+    width?: number;
+    height?: number;
+    durationMs?: number;
+    objectStorage?: ObjectStorageFile;
+    /** 私有存储桶预签名地址的到期时间，公开地址或远程链接为空 */
+    expiresAt?: string;
+};
+
+export type ServerMediaAccessItem = {
+    storageKey: string;
+    url: string;
+    expiresAt?: string;
+};
+
+export type ServerAiTaskType = "image" | "video" | "text";
+export type ServerAiTaskStatus = "pending" | "running" | "success" | "failed" | "canceled";
+export type ServerGenerationSource = "imagePage" | "videoPage" | "canvas" | "storyboard";
+
+export type ServerRuntimeConfig = {
+    aiTaskPollingIntervalSeconds: number;
+};
+
+/** 服务端系统消息描述，插值参数可以包含嵌套系统消息或原始业务值。 */
+export type ServerSystemMessage = {
+    key: string;
+    arguments: unknown[];
+};
+
+export type ServerAiTaskMediaReference = {
+    id?: string;
+    name?: string;
+    mimeType?: string;
+    storageKey?: string;
+    url?: string;
+    role?: string;
+    trimStartMs?: number;
+    trimEndMs?: number;
+};
+
+export type ServerAiTask = {
+    id: string;
+    taskType: ServerAiTaskType;
+    model: string;
+    provider: string;
+    status: ServerAiTaskStatus;
+    progress: number;
+    providerRequestSent?: boolean;
+    requestData: unknown;
+    resultData?: unknown;
+    errorMessage?: string;
+    systemMessage?: ServerSystemMessage | null;
+    startedAt?: string;
+    completedAt?: string;
+    createdAt: string;
+    updatedAt: string;
+};
+
+export type AiTaskErrorDetails = {
+    messageKey?: string;
+    source: string;
+    category: string;
+    stage: string;
+    httpStatus?: number;
+    code?: string;
+    type?: string;
+    parameter?: string;
+    message: string;
+    requestAccepted: boolean | null;
+    safeToRetry: boolean;
+};
+
+export class AiTaskFailureError extends Error {
+    readonly details: AiTaskErrorDetails;
+
+    constructor(message: string, details: AiTaskErrorDetails) {
+        super(message);
+        this.name = "AiTaskFailureError";
+        this.details = details;
+    }
+}
+
+export type ServerAiTaskCreateInput = {
+    taskType: ServerAiTaskType;
+    prompt: string;
+    model?: string;
+    parameters?: Record<string, unknown>;
+    references?: ServerAiTaskMediaReference[];
+    audioReferences?: ServerAiTaskMediaReference[];
+    videoReferences?: ServerAiTaskMediaReference[];
+    generationSource?: ServerGenerationSource;
+    generationStyleIds?: number[];
+    generationStyleSnapshots?: GenerationStyleSnapshot[];
+    videoGenerationMode?: "text-to-video" | "image-to-video" | "reference-to-video" | "first-last-frame-to-video";
+};
+
+export type ServerVideoWorkflowStageQuote = {
+    role: string;
+    displayName: string;
+    taskType: "image" | "video" | string;
+    model?: string | null;
+    taskCount: number;
+    /** 阶段定价失败（报价整体不可用）时为 null，仅保留阶段骨架供前端识别工作流构成。 */
+    credits?: CreditAmount | null;
+    videoGenerationMode?: "text-to-video" | "image-to-video" | "reference-to-video" | "first-last-frame-to-video" | string | null;
+};
+
+export type ServerVideoWorkflowQuote = {
+    available: boolean;
+    workflowType?: string;
+    stages: ServerVideoWorkflowStageQuote[];
+    credits?: CreditAmount | null;
+    reason?: string;
+    requiredCapabilities: string[];
+};
+
+export type PromptOptimizationType = "image" | "video";
+
+export type GenerationStyleType = "image" | "video";
+
+export type SkillType = "image" | "video" | "canvasSettingGraph";
+
+export type SkillOption = {
+    id: number;
+    name: string;
+    description: string;
+    targetType: SkillType;
+    coverUrl: string;
+    /** 服务端从技能提示词识别的视频工作流类型。 */
+    workflowType?: string | null;
+    /** 画布设定图技能的流程提示词快照。 */
+    systemPrompt?: string;
+    /** 技能默认生成比例。 */
+    aspectRatio?: string;
+};
+
+export type SkillOptionListResponse = {
+    skills: SkillOption[];
+};
+
+export type GenerationStyleSnapshot = {
+    id: number;
+    name: string;
+    generationType: GenerationStyleType;
+    stylePrompt: string;
+};
+
+export type GenerationStyleOption = {
+    id: number;
+    name: string;
+    generationType: GenerationStyleType;
+    coverUrl: string;
+    category: string;
+};
+
+export type ServerGenerationStyle = GenerationStyleSnapshot & {
+    coverUrl: string;
+    category: string;
+    status: number;
+    sortOrder: number;
+    createdAt: string;
+    updatedAt: string;
+};
+
+export type GenerationStyleListResponse = {
+    styles: ServerGenerationStyle[];
+    total: number;
+};
+
+export type GenerationStyleOptionListResponse = {
+    styles: GenerationStyleOption[];
+};
+
+export type ServerAiModelList = {
+    models: Array<{
+        value: string;
+        label: string;
+        capability: string;
+        provider: string;
+        apiFormat: ApiCallFormat;
+        defaultModel: boolean;
+        creditCost: CreditAmount;
+        ownerTeamId?: number;
+        creditUnit: ModelCreditUnit;
+        capabilities: string[];
+        videoBillingConfiguration: VideoBillingConfiguration | null;
+        isCustomModel: boolean;
+        videoGenerationConstraints: Partial<Record<VideoGenerationMode, VideoGenerationConstraints>>;
+        imageBillingConfiguration: ImageBillingConfiguration | null;
+        icon: string | null;
+    }>;
+    imageModels: string[];
+    videoModels: string[];
+    textModels: string[];
+};
+
+export type AuthResponse = {
+    token: string;
+    tokenType: string;
+    expiresAt: string;
+    user: ServerUserProfile;
+};
+
+export type OAuth2ProviderInfo = {
+    providerId: string;
+    displayName: string;
+    authorizationPath: string;
+};
+
+export type OAuth2ProviderListResponse = {
+    providers: OAuth2ProviderInfo[];
+};
+
+export type OAuth2AuthorizationPreparation = {
+    authorizationPath: string;
+};
+
+export type InvitationInfo = {
+    invitationCode: string;
+};
+
+export type InvitationRewardSettings = {
+    invitationRewardCredits: CreditAmount;
+};
+
+export type UserListResponse = {
+    users: ServerUserProfile[];
+    total: number;
+};
+
+export type UserStatisticsResponse = {
+    totalUsers: number;
+    monthlyNewUsers: number;
+    dailyNewUsers: number;
+};
+
+/** 用户增长趋势的单日数据，totalUsers 为截至当日结束的累计用户数。 */
+export type UserTrendPoint = {
+    date: string;
+    newUsers: number;
+    totalUsers: number;
+};
+
+/** 用户增长趋势，points 按日期升序、缺失日期已补零。 */
+export type UserTrendResponse = {
+    startDate: string;
+    endDate: string;
+    totalUsers: number;
+    newUsers: number;
+    points: UserTrendPoint[];
+};
+
+/** 后端渠道配置，对齐 AiChannelConfig record */
+export type ServerChannel = {
+    id: string;
+    name: string;
+    baseUrl: string;
+    apiKey: string;
+    apiFormat: ApiCallFormat;
+    models: string[];
+};
+
+/** 渠道列表响应 */
+export type ServerChannelList = {
+    channels: ServerChannel[];
+};
+
+export type ServerChannelModelList = {
+    models: string[];
+};
+
+/** 平台 OAuth 渠道配置，配置由管理后台维护，替代 .env 中的固定配置。 */
+export type OAuthProviderInfo = {
+    /** 渠道标识，例如 google、linuxDo。 */
+    provider: string;
+    /** 渠道展示名称。 */
+    displayName: string;
+    /** 是否启用该渠道登录。 */
+    enabled: boolean;
+    /** OAuth 客户端 ID。 */
+    clientId: string;
+    /** OAuth 客户端密钥，保存后由服务端按需返回。 */
+    clientSecret: string;
+    /** OAuth 回调地址，需要与第三方平台登记地址一致。 */
+    redirectUri: string;
+    /** 服务端回调路径，用于按当前域名拼出默认回调地址。 */
+    callbackPath: string;
+};
+
+/** OAuth 渠道列表响应。 */
+export type OAuthProviderListResponse = {
+    providers: OAuthProviderInfo[];
+};
+
+/** 更新 OAuth 渠道配置的请求体。 */
+export type OAuthProviderUpdateInput = Pick<OAuthProviderInfo, "provider" | "enabled" | "clientId" | "clientSecret" | "redirectUri">;
+
+/** 平台标准 OAuth2 登录渠道配置，由管理后台维护并支持多渠道路由。 */
+export type StandardOAuthProviderInfo = {
+    /** 渠道标识，由管理后台创建时生成，创建后不可修改。 */
+    provider: string;
+    /** 渠道展示名称，展示在管理后台与登录页。 */
+    displayName: string;
+    /** 是否启用该登录渠道。 */
+    enabled: boolean;
+    /** OAuth2 客户端 ID。 */
+    clientId: string;
+    /** OAuth2 客户端密钥明文，仅管理员接口返回。 */
+    clientSecret: string;
+    /** 完整回调地址，路径必须是该渠道的回调路径。 */
+    redirectUri: string;
+    /** 服务端回调路径，由渠道标识拼接，只读展示。 */
+    callbackPath: string;
+    /** OAuth2 授权端点。 */
+    authorizationUri: string;
+    /** OAuth2 令牌端点。 */
+    tokenUri: string;
+    /** OAuth2 用户信息端点。 */
+    userInfoUri: string;
+    /** 授权范围，空格分隔，不支持 openid。 */
+    scopes: string;
+    /** 令牌端点的客户端认证方式。 */
+    clientAuthenticationMethod: "client_secret_basic" | "client_secret_post";
+    /** 用户信息接口中的用户标识字段名。 */
+    userNameAttribute: string;
+    /** 用户信息接口中的邮箱字段名。 */
+    emailAttribute: string;
+    /** 用户信息接口中的昵称字段名。 */
+    nicknameAttribute: string;
+    /** 用户信息接口中的头像字段名。 */
+    avatarAttribute: string;
+};
+
+/** 新增或更新标准 OAuth2 渠道的请求体，callbackPath 由服务端生成。 */
+export type StandardOAuthProviderInput = Omit<StandardOAuthProviderInfo, "callbackPath">;
+
+/** 标准 OAuth2 渠道列表响应。 */
+export type StandardOAuthProviderListResponse = {
+    providers: StandardOAuthProviderInfo[];
+};
+
+/** 对外 OAuth2 授权客户端，供其他系统使用本站账号登录。 */
+export type OAuthClientInfo = {
+    /** 服务端生成的客户端标识。 */
+    clientId: string;
+    /** 应用名称。 */
+    displayName: string;
+    /** 是否允许该客户端发起授权。 */
+    enabled: boolean;
+    /** 客户端密钥明文，仅管理员接口返回。 */
+    clientSecret: string;
+    /** 允许的回调地址。 */
+    redirectUris: string[];
+    /** 应用图标读地址，未配置时为空。 */
+    logoUrl: string;
+    /** 应用图标的媒体存储键，未配置时为空。 */
+    logoStorageKey: string;
+    /** 授权页展示文字，未配置时为空。 */
+    displayContent: string;
+};
+
+/** 对外授权客户端列表响应。 */
+export type OAuthClientListResponse = {
+    clients: OAuthClientInfo[];
+};
+
+/** 新增对外授权客户端的请求体。 */
+export type OAuthClientCreateInput = Pick<OAuthClientInfo, "displayName" | "enabled" | "redirectUris" | "logoStorageKey" | "displayContent">;
+
+/** 更新对外授权客户端的请求体。 */
+export type OAuthClientUpdateInput = Pick<OAuthClientInfo, "clientId" | "displayName" | "enabled" | "redirectUris" | "logoStorageKey" | "displayContent">;
+
+/** 授权确认页展示的应用信息。 */
+export type OAuthAuthorizationRequestView = {
+    displayName: string;
+    scope: string;
+    /** 应用图标读地址，未配置时为空。 */
+    logoUrl: string;
+    /** 授权页展示文字，未配置时为空。 */
+    displayContent: string;
+};
+
+/** 同意或拒绝授权后的外部回调地址。 */
+export type OAuthAuthorizationDecision = {
+    redirectUrl: string;
+};
+
+export type ServerModelConfig = {
+    id: string;
+    channelId: string;
+    modelName: string;
+    modelType: "image" | "video" | "text";
+    capabilities: string[];
+    defaultModel: boolean;
+    /** 是否开启，关闭后不出现在用户的模型下拉选择中。 */
+    enabled: boolean;
+    sortOrder: number;
+    creditCost: CreditAmount;
+    ownerTeamId?: number;
+    creditUnit: ModelCreditUnit;
+    thinkingEnabled: boolean;
+    reasoningEffort: "high" | "max";
+    requestConcurrency: number;
+    convertImageSizeToPixels: boolean;
+    imageSizeMappings: ImageSizeMappings | null;
+    customBodyParameters: Record<string, unknown>;
+    videoBillingConfiguration: VideoBillingConfiguration | null;
+    imageBillingConfiguration: ImageBillingConfiguration | null;
+    displayName: string | null;
+    modelIcon: string | null;
+    isCustomModel: boolean;
+    customModelConfig: Record<string, CustomModelGroupConfig>;
+};
+
+export type CreditSettings = {
+    initialCredits: CreditAmount;
+};
+
+export type TimeoutSettings = {
+    aiRequestBodyTimeoutSeconds: number;
+    storyboardAgentTimeoutSeconds: number;
+    scriptAgentTimeoutSeconds: number;
+    storyBibleAgentTimeoutSeconds: number;
+    taskWaitTimeoutSeconds: number;
+    videoTaskWaitTimeoutSeconds: number;
+    videoCompositionExecutionTimeoutSeconds: number;
+    tencentCosSocketTimeoutMilliseconds: number;
+};
+
+export type FirstPurchaseBonusSettings = {
+    percent: CreditAmount;
+};
+
+export type FirstPurchaseBonusStatus = {
+    /** 首充赠送比例，单位为百分数。 */
+    percent: CreditAmount;
+    /** 是否开启赠送（比例大于 0）。 */
+    enabled: boolean;
+    /** 当前账号是否仍享有赠送资格（首次付费前为 true）。 */
+    eligible: boolean;
+    /** 购买页弹窗是否已展示过。 */
+    noticeSeen: boolean;
+};
+
+export type CreditBalance = {
+    userId: number;
+    creditBalance: CreditAmount;
+};
+
+export type ServerCreditDistributionItem = {
+    name: string;
+    consumedCredits: CreditAmount;
+};
+
+export type ServerCreditTrendItem = {
+    period: string;
+    consumedCredits: CreditAmount;
+};
+
+export type ServerCreditOverview = {
+    generationTypeDistribution: ServerCreditDistributionItem[];
+    modelDistribution: ServerCreditDistributionItem[];
+    trend: ServerCreditTrendItem[];
+};
+
+export type ServerCreditTransactionType = "task_charge" | "task_refund" | "admin_adjustment" | "card_redeem" | "initial_grant" | "invitation_reward" | "daily_check_in" | "credit_expired" | "storage_purchase" | "storage_charge" | "credit_purchase" | "first_purchase_bonus";
+
+export type ServerCreditDirection = "add" | "spend";
+
+export type ServerCreditSource = "image" | "video" | "task_refund" | "card_redeem" | "admin_adjustment" | "initial_grant" | "invitation_reward" | "daily_check_in" | "credit_expired" | "storage_purchase" | "storage_charge" | "credit_purchase" | "first_purchase_bonus";
+
+export type ServerCreditProduct = {
+    id: number;
+    credits: CreditAmount;
+    bonusCredits: CreditAmount;
+    totalCredits: CreditAmount;
+    priceAmount: string;
+    sortOrder: number;
+    enabled: boolean;
+};
+
+export type ServerCreditProductList = {
+    products: ServerCreditProduct[];
+};
+
+export type ServerCreateCreditOrderResponse = {
+    orderNo: string;
+    paymentMethod: string;
+    status: "pending" | "processing" | "paid" | "closed" | string;
+    paymentUrl: string;
+    priceAmount: string;
+    expiresAt: string;
+};
+
+export type ServerCreditOrderStatus = {
+    orderNo: string;
+    credits: CreditAmount;
+    /** 该订单实发的首充赠送积分，未获得时为 0。 */
+    bonusCredits: CreditAmount;
+    priceAmount: string;
+    paymentMethod: string;
+    status: "pending" | "processing" | "paid" | "closed" | string;
+    paidAt: string | null;
+};
+
+export type ServerCreditOrderItem = {
+    orderNo: string;
+    credits: CreditAmount;
+    priceAmount: string;
+    paymentMethod: string;
+    status: "pending" | "processing" | "paid" | "closed" | string;
+    createdAt: string;
+    expiresAt: string;
+    paidAt: string | null;
+};
+
+export type ServerCreditOrderList = {
+    orders: ServerCreditOrderItem[];
+};
+
+export type ServerUserCreditTransaction = {
+    id: number;
+    transactionType: ServerCreditTransactionType;
+    direction: ServerCreditDirection;
+    generationType: Exclude<ServerAiTaskType, "text"> | null;
+    model: string | null;
+    generationSource: ServerGenerationSource | null;
+    changeAmount: CreditAmount;
+    reason: string;
+    balanceAfter: CreditAmount;
+    invitedUserId: number | null;
+    createdAt: string;
+};
+
+export type ServerUserCreditTransactionList = {
+    transactions: ServerUserCreditTransaction[];
+    total: number;
+};
+
+export type ServerTaskRecord = {
+    taskId: string;
+    taskType: "image" | "video";
+    model: string;
+    status: ServerAiTaskStatus;
+    prompt: string;
+    resolution: string | null;
+    size: string | null;
+    seconds: string | null;
+    consumedCredits: CreditAmount;
+    resultUrls: string[];
+    /** 生成结果的媒体存储键，与 resultUrls 一一对应，取不到时为空串。 */
+    storageKeys: string[];
+    /** 列表缩略图地址，与 resultUrls 一一对应，图片取读取时缩放的小图、视频取封面，取不到时为空串。 */
+    thumbnailUrls: string[];
+    errorMessage: string | null;
+    createdAt: string;
+    completedAt: string | null;
+};
+
+export type ServerTaskRecordList = {
+    records: ServerTaskRecord[];
+    total: number;
+};
+
+export type ServerAdminTaskRecord = ServerTaskRecord & {
+    userId: number;
+    username: string | null;
+    nickname: string | null;
+    email: string | null;
+};
+
+export type ServerAdminTaskRecordList = {
+    records: ServerAdminTaskRecord[];
+    total: number;
+};
+
+export type ServerAdminCreditTransaction = ServerUserCreditTransaction & {
+    userId: number;
+    username: string;
+    nickname: string | null;
+    email: string;
+};
+
+export type ServerAdminCreditTransactionList = {
+    transactions: ServerAdminCreditTransaction[];
+    total: number;
+};
+
+export type ServerCheckInStatus = {
+    today: string;
+    checkedInToday: boolean;
+    monthCheckedCount: number;
+    monthCheckedDates: string[];
+    dailyCredits: CreditAmount;
+    todayCredits: CreditAmount;
+};
+
+export type ServerCheckInResult = {
+    checkInDate: string;
+    earnedCredits: CreditAmount;
+    creditBalance: CreditAmount;
+};
+
+export type ServerCheckInRewardSettings = {
+    checkInCredits: CreditAmount;
+};
+
+export type ServerRedeemCreditsResponse = {
+    cardId: number;
+    cardMasked: string;
+    credits: CreditAmount;
+    creditBalance: CreditAmount;
+    redeemedAt: string;
+};
+
+export type ServerRedemptionRecord = {
+    id: number;
+    transactionId: number;
+    cardCode: string;
+    cardMasked: string;
+    cardSuffix: string;
+    credits: CreditAmount;
+    balanceAfter: CreditAmount;
+    redeemedAt: string;
+};
+
+export type ServerRedemptionRecordList = {
+    records: ServerRedemptionRecord[];
+    total: number;
+};
+
+export type ServerCreditCardBatch = {
+    id: number;
+    quantity: number;
+    creditsPerCard: CreditAmount;
+    redeemedCount: number;
+    availableCount: number;
+    createdByUserId: number;
+    createdByName: string;
+    createdByEmail: string;
+    createdAt: string;
+};
+
+export type ServerCreditCardBatchList = {
+    batches: ServerCreditCardBatch[];
+    total: number;
+};
+
+export type ServerCreditCard = {
+    id: number;
+    batchId: number;
+    code: string | null;
+    codeMasked: string;
+    codeSuffix: string;
+    credits: CreditAmount;
+    status: "available" | "redeemed";
+    redeemedByUserId: number | null;
+    redeemedByUsername: string | null;
+    redeemedByNickname: string | null;
+    redeemedByEmail: string | null;
+    redeemedAt: string;
+    createdAt: string;
+    transactionId: number | null;
+    balanceAfter: CreditAmount | null;
+};
+
+export type ServerCreditCardList = {
+    cards: ServerCreditCard[];
+    total: number;
+};
+
+/** 对象存储列表响应，复用 ObjectStorageConfig 类型 */
+export type ServerObjectStorageList = {
+    objectStorages: ObjectStorageConfig[];
+};
+
+const serverApiPrefix = "/api/v1";
+const defaultServerUrl = "http://127.0.0.1:8080";
+
+export function sendEmailCode(email: string) {
+    return serverPost("/auth/sendEmailCode", { email }, { auth: false });
+}
+
+export function registerByEmail(input: { email: string; code: string; password: string; nickname?: string; invitationCode?: string }) {
+    return serverPost<AuthResponse>("/auth/register", input, { auth: false });
+}
+
+export function loginByAccount(input: { account: string; password: string }) {
+    return serverPost<AuthResponse>("/auth/login", input, { auth: false });
+}
+
+export function requestPasswordReset(email: string) {
+    return serverPost("/auth/requestPasswordReset", { email }, { auth: false });
+}
+
+export function resetPassword(input: { token: string; newPassword: string }) {
+    return serverPost("/auth/resetPassword", input, { auth: false });
+}
+
+export function listOAuth2Providers() {
+    return serverGet<OAuth2ProviderListResponse>("/auth/oauth/listProviders", { auth: false });
+}
+
+export function prepareOAuth2Authorization(providerId: string, invitationCode?: string) {
+    return serverPost<OAuth2AuthorizationPreparation>("/auth/oauth/prepareAuthorization", { providerId, invitationCode }, { auth: false });
+}
+
+export function exchangeOAuth2LoginCode(loginCode: string) {
+    return serverPost<AuthResponse>("/auth/oauth/exchangeLoginCode", { loginCode }, { auth: false });
+}
+
+export function logoutCurrentUser() {
+    return serverPost("/auth/logout", {});
+}
+
+export function acknowledgeWelcome() {
+    return serverPost("/auth/acknowledgeWelcome", {});
+}
+
+export function completeOnboarding(version: number) {
+    return serverPost("/auth/completeOnboarding", { version });
+}
+
+export function completeCreationTour(version: number) {
+    return serverPost("/auth/completeCreationTour", { version });
+}
+
+export function getCurrentUserInfo(options?: ServerRequestOptions) {
+    return serverGet<ServerUserProfile>("/auth/userInfo", options);
+}
+
+export function getInvitationInfo() {
+    return serverGet<InvitationInfo>("/invitation/getInvitationInfo");
+}
+
+export function updateCurrentUserProfile(input: Pick<ServerUserProfile, "username" | "nickname" | "avatar">) {
+    return serverPost<ServerUserProfile>("/auth/updateUserProfile", input);
+}
+
+export function changeCurrentUserPassword(input: { currentPassword: string; newPassword: string }) {
+    return serverPost("/auth/changePassword", input);
+}
+
+export function listServerUsers(params: { page: number; pageSize: number; filterTeamId?: number; keyword?: string; userId?: string; role?: string; status?: number; createdAfter?: string; createdBefore?: string }) {
+    const query = new URLSearchParams({ page: String(params.page), pageSize: String(params.pageSize) });
+    if (params.filterTeamId !== undefined) query.set("filterTeamId", String(params.filterTeamId));
+    if (params.keyword) query.set("keyword", params.keyword);
+    if (params.userId) query.set("userId", params.userId);
+    if (params.role) query.set("role", params.role);
+    if (params.status !== undefined) query.set("status", String(params.status));
+    if (params.createdAfter) query.set("createdAfter", params.createdAfter);
+    if (params.createdBefore) query.set("createdBefore", params.createdBefore);
+    return serverGet<UserListResponse>(`/admin/user/listUsers?${query}`);
+}
+
+export function getServerUserStatistics(filterTeamId?: number) {
+    return serverGet<UserStatisticsResponse>(`/admin/user/getUserStatistics${filterTeamId === undefined ? "" : `?filterTeamId=${filterTeamId}`}`);
+}
+
+/** 查询用户数量与每日增量趋势，日期为 yyyy-MM-dd。 */
+export function getServerUserTrend(startDate: string, endDate: string, filterTeamId?: number) {
+    const params = new URLSearchParams({ startDate, endDate });
+    if (filterTeamId !== undefined) params.set("filterTeamId", String(filterTeamId));
+    return serverGet<UserTrendResponse>(`/admin/user/getUserTrend?${params.toString()}`);
+}
+
+export function updateServerUserStatus(userId: number, status: number) {
+    return serverPost("/admin/user/updateUserStatus", { userId, status });
+}
+
+export function updateServerUserRole(userId: number, role: "user" | "admin") {
+    return serverPost("/admin/user/updateUserRole", { userId, role });
+}
+
+export function adminCreateUser(input: { account: string; password: string; nickname?: string; role?: string }) {
+    return serverPost("/admin/user/createUser", input);
+}
+
+/** 单条接口访问日志 */
+export type ServerApiLog = {
+    id: number;
+    httpMethod: string;
+    requestPath: string;
+    clientIp: string;
+    userId: number | null;
+    statusCode: number;
+    success: boolean;
+    hasError: boolean;
+    errorContent: string | null;
+    requestBody: string | null;
+    durationMs: number;
+    createdAt: string;
+};
+
+/** 接口访问日志列表 */
+export type ServerApiLogList = { logs: ServerApiLog[]; total: number };
+
+export function listAdminApiLogs(params: { page: number; pageSize: number; keyword?: string; result?: "success" | "error" }) {
+    const query = new URLSearchParams({ page: String(params.page), pageSize: String(params.pageSize) });
+    if (params.keyword?.trim()) query.set("keyword", params.keyword.trim());
+    if (params.result) query.set("result", params.result);
+    return serverGet<ServerApiLogList>(`/admin/apiLog/listApiLogs?${query}`);
+}
+
+export function adjustServerUserCredits(input: { userId: number; changeAmount: CreditAmount; reason: string }) {
+    return serverPost<CreditBalance>("/admin/user/adjustUserCredits", input);
+}
+
+export function resetServerUserPassword(input: { userId: number; newPassword: string }) {
+    return serverPost("/admin/user/resetUserPassword", input);
+}
+
+export function unlockServerUserPassword(userId: number) {
+    return serverPost("/admin/user/unlockUserPassword", { userId });
+}
+
+// ---- 系统公告 ----
+
+export type SystemNotification = {
+    id: number;
+    title: string;
+    content: string;
+    priority: "normal" | "high";
+    status: number;
+    publishedAt?: string;
+    read: boolean;
+    createdAt: string;
+};
+
+// ---- 首页精选内容 ----
+
+export type HomepageShowcase = {
+    id: number;
+    title: string;
+    description: string;
+    category: string;
+    creatorName: string;
+    mediaType: "image" | "video";
+    mediaUrl: string;
+    thumbnailUrl: string;
+    targetType: "image" | "video" | "canvas" | "asset";
+    targetPath: string;
+    promptContent: string;
+    sortOrder: number;
+    status: number;
+    createdAt?: string;
+    updatedAt?: string;
+};
+
+export type HomepageShowcaseInput = {
+    title: string;
+    description?: string;
+    category: string;
+    creatorName: string;
+    mediaType: HomepageShowcase["mediaType"];
+    mediaUrl: string;
+    thumbnailUrl?: string;
+    targetType: HomepageShowcase["targetType"];
+    targetPath?: string;
+    promptContent?: string;
+    sortOrder?: number;
+    status?: number;
+};
+
+export function listHomepageShowcases(limit = 24) {
+    return serverGet<{ items: HomepageShowcase[]; total: number }>(`/homepage/listShowcases?limit=${limit}`, { auth: Boolean(useUserStore.getState().token) });
+}
+
+export function listAdminHomepageShowcases() {
+    return serverGet<{ items: HomepageShowcase[]; total: number }>("/admin/homepage/listShowcases");
+}
+
+export function createAdminHomepageShowcase(input: HomepageShowcaseInput) {
+    return serverPost("/admin/homepage/createShowcase", input);
+}
+
+export function updateAdminHomepageShowcase(input: HomepageShowcaseInput & { id: number }) {
+    return serverPost("/admin/homepage/updateShowcase", input);
+}
+
+export function updateAdminHomepageShowcaseStatus(id: number, status: number) {
+    return serverPost("/admin/homepage/updateShowcaseStatus", { id, status });
+}
+
+export function deleteAdminHomepageShowcases(ids: number[]) {
+    return serverPost("/admin/homepage/deleteShowcases", { ids });
+}
+
+// ---- 提示词库 ----
+
+export type ServerPrompt = {
+    id: number;
+    title: string;
+    coverUrl: string;
+    prompt: string;
+    tags: string[];
+    category: string;
+    githubUrl: string;
+    preview: string;
+    status?: number;
+    sortOrder?: number;
+    createdAt: string;
+    updatedAt: string;
+};
+
+export type ServerPromptListResponse = {
+    items: ServerPrompt[];
+    tags: string[];
+    categories: string[];
+    total: number;
+};
+
+export type ServerPromptListParams = {
+    keyword?: string;
+    tag?: string[];
+    category?: string;
+    status?: number;
+    page?: number;
+    pageSize?: number;
+};
+
+export type ServerPromptInput = {
+    id?: number;
+    title: string;
+    prompt: string;
+    category: string;
+    tags?: string[];
+    coverUrl?: string;
+    preview?: string;
+    sourceUrl?: string;
+    status?: number;
+    sortOrder?: number;
+};
+
+export function listServerPrompts(params: ServerPromptListParams = {}) {
+    return serverGet<ServerPromptListResponse>(`/prompt/listPrompts${promptQuery(params)}`);
+}
+
+export function listAdminPrompts(params: ServerPromptListParams = {}) {
+    return serverGet<ServerPromptListResponse>(`/admin/prompt/listPrompts${promptQuery(params)}`);
+}
+
+export function createAdminPrompt(input: ServerPromptInput) {
+    return serverPost("/admin/prompt/createPrompt", input);
+}
+
+export function updateAdminPrompt(input: ServerPromptInput & { id: number }) {
+    return serverPost("/admin/prompt/updatePrompt", input);
+}
+
+export function updateAdminPromptStatus(id: number, status: number) {
+    return serverPost("/admin/prompt/updatePromptStatus", { id, status });
+}
+
+export function deleteAdminPrompts(ids: number[]) {
+    return serverPost("/admin/prompt/deletePrompts", { ids });
+}
+
+// ---- 图片和视频生成风格 ----
+
+export function listGenerationStyles(generationType: GenerationStyleType) {
+    return serverGet<GenerationStyleOptionListResponse>(`/style/listStyles?generationType=${encodeURIComponent(generationType)}`);
+}
+
+// ---- 图片和视频生成技能 ----
+
+export function listSkills(targetType: SkillType) {
+    return serverGet<SkillOptionListResponse>(`/skill/listSkills?targetType=${encodeURIComponent(targetType)}`);
+}
+
+export type SkillMarketCategory = "image" | "video" | "ecommerce" | "portrait" | "viralReplica";
+
+export type SkillReviewStatus = "private" | "pending" | "published" | "rejected";
+
+export type SkillUsageStep = {
+    title: string;
+    detail: string;
+};
+
+export type SkillMarketCard = {
+    id: number;
+    name: string;
+    subtitle: string;
+    description: string;
+    category: SkillMarketCategory;
+    targetType: "image" | "video";
+    coverUrl: string;
+    aspectRatio?: string;
+    workflowType?: string | null;
+    authorName: string;
+    official: boolean;
+    favorited: boolean;
+};
+
+export type SkillPendingRevision = {
+    name: string;
+    subtitle: string;
+    description: string;
+    category: SkillMarketCategory;
+    targetType: "image" | "video";
+    coverUrl: string;
+    aspectRatio: string;
+    audience: string;
+    usageSteps: SkillUsageStep[];
+    systemPrompt: string;
+    workflowId: string;
+};
+
+export type SkillMarketDetail = SkillMarketCard & {
+    audience: string;
+    usageSteps: SkillUsageStep[];
+    status: number;
+    reviewStatus: SkillReviewStatus;
+    rejectReason: string;
+    systemPrompt?: string | null;
+    owned: boolean;
+    related: SkillMarketCard[];
+    workflowId?: string | null;
+    revisionStatus?: string;
+    revisionRejectReason?: string;
+    pendingRevision?: SkillPendingRevision | null;
+};
+
+export type SkillMineCard = SkillMarketCard & {
+    status: number;
+    reviewStatus: SkillReviewStatus;
+    rejectReason: string;
+    owned: boolean;
+    revisionStatus?: string;
+};
+
+export type SaveUserSkillInput = {
+    id?: number;
+    name: string;
+    subtitle?: string;
+    description?: string;
+    category: SkillMarketCategory;
+    targetType: "image" | "video";
+    systemPrompt: string;
+    aspectRatio?: string;
+    coverUrl?: string;
+    audience?: string;
+    usageSteps?: SkillUsageStep[];
+    workflowId: string;
+};
+
+export type ServerSkill = {
+    id: number;
+    name: string;
+    description: string;
+    targetType: SkillType;
+    systemPrompt: string;
+    aspectRatio?: string;
+    coverUrl: string;
+    status: number;
+    sortOrder: number;
+    createdAt: string;
+    updatedAt: string;
+    category?: string | null;
+    subtitle?: string;
+    audience?: string;
+    usageSteps?: SkillUsageStep[];
+    ownerUserId?: number | null;
+    reviewStatus?: SkillReviewStatus;
+    revisionStatus?: string;
+    rejectReason?: string;
+    authorName?: string;
+    workflowId?: string | null;
+};
+
+export type ServerSkillListResponse = {
+    skills: ServerSkill[];
+    total: number;
+};
+
+export type ServerSkillListParams = {
+    keyword?: string;
+    targetType?: "all" | SkillType;
+    status?: number;
+    reviewStatus?: "all" | SkillReviewStatus;
+    page?: number;
+    pageSize?: number;
+};
+
+function skillQuery(params: ServerSkillListParams = {}) {
+    const query = new URLSearchParams({ page: String(params.page || 1), pageSize: String(params.pageSize || 20) });
+    if (params.keyword) query.set("keyword", params.keyword);
+    if (params.targetType) query.set("targetType", params.targetType);
+    if (params.status !== undefined) query.set("status", String(params.status));
+    if (params.reviewStatus) query.set("reviewStatus", params.reviewStatus);
+    return `?${query.toString()}`;
+}
+
+export function listAdminSkills(params: ServerSkillListParams = {}) {
+    return serverGet<ServerSkillListResponse>(`/admin/skill/listSkills${skillQuery(params)}`);
+}
+
+export type ServerSkillInput = {
+    id?: number;
+    name: string;
+    description?: string;
+    targetType: SkillType;
+    systemPrompt: string;
+    aspectRatio?: string;
+    coverUrl?: string;
+    status?: number;
+    sortOrder?: number;
+    category?: string | null;
+    subtitle?: string;
+    audience?: string;
+    usageSteps?: SkillUsageStep[];
+    workflowId: string;
+};
+
+export function createAdminSkill(input: Omit<ServerSkillInput, "id">) {
+    return serverPost("/admin/skill/createSkill", input);
+}
+
+export function updateAdminSkill(input: ServerSkillInput & { id: number }) {
+    return serverPost("/admin/skill/updateSkill", input);
+}
+
+export function updateAdminSkillStatus(id: number, status: number) {
+    return serverPost("/admin/skill/updateSkillStatus", { id, status });
+}
+
+export function deleteAdminSkills(ids: number[]) {
+    return serverPost("/admin/skill/deleteSkills", { ids });
+}
+
+export function reviewAdminSkill(input: { id: number; approved: boolean; reason?: string }) {
+    return serverPost("/admin/skill/reviewSkill", input);
+}
+
+function skillMarketQuery(params: { category?: string; keyword?: string; tab?: string; page?: number; pageSize?: number } = {}) {
+    const query = new URLSearchParams({ page: String(params.page || 1), pageSize: String(params.pageSize || 12) });
+    if (params.category) query.set("category", params.category);
+    if (params.keyword) query.set("keyword", params.keyword);
+    if (params.tab) query.set("tab", params.tab);
+    return `?${query.toString()}`;
+}
+
+export function listMarketSkills(params: { category?: string; keyword?: string; page?: number; pageSize?: number } = {}) {
+    return serverGet<{ skills: SkillMarketCard[]; total: number }>(`/skill/listMarketSkills${skillMarketQuery(params)}`);
+}
+
+export function getSkillDetail(id: number) {
+    return serverGet<SkillMarketDetail>(`/skill/getSkillDetail?id=${id}`);
+}
+
+export function listMySkills(params: { tab: "created" | "favorite"; keyword?: string; page?: number; pageSize?: number }) {
+    return serverGet<{ skills: SkillMineCard[]; total: number }>(`/skill/listMySkills${skillMarketQuery(params)}`);
+}
+
+export function createUserSkill(input: SaveUserSkillInput) {
+    return serverPost("/skill/createSkill", input);
+}
+
+export function updateUserSkill(input: SaveUserSkillInput & { id: number }) {
+    return serverPost("/skill/updateSkill", input);
+}
+
+export function deleteUserSkill(id: number) {
+    return serverPost("/skill/deleteSkill", { id });
+}
+
+export function submitSkillReview(id: number) {
+    return serverPost("/skill/submitSkillReview", { id });
+}
+
+export function withdrawSkill(id: number) {
+    return serverPost("/skill/withdrawSkill", { id });
+}
+
+export function favoriteSkill(id: number) {
+    return serverPost("/skill/favoriteSkill", { id });
+}
+
+export function unfavoriteSkill(id: number) {
+    return serverPost("/skill/unfavoriteSkill", { id });
+}
+
+export type ServerGenerationStyleListParams = {
+    keyword?: string;
+    generationType?: "all" | GenerationStyleType;
+    status?: number;
+    page?: number;
+    pageSize?: number;
+};
+
+function generationStyleQuery(params: ServerGenerationStyleListParams = {}) {
+    const query = new URLSearchParams({ page: String(params.page || 1), pageSize: String(params.pageSize || 20) });
+    if (params.keyword) query.set("keyword", params.keyword);
+    if (params.generationType) query.set("generationType", params.generationType);
+    if (params.status !== undefined) query.set("status", String(params.status));
+    return `?${query.toString()}`;
+}
+
+export function listAdminGenerationStyles(params: ServerGenerationStyleListParams = {}) {
+    return serverGet<GenerationStyleListResponse>(`/admin/style/listStyles${generationStyleQuery(params)}`);
+}
+
+export type ServerGenerationStyleInput = {
+    id?: number;
+    generationType: GenerationStyleType;
+    name: string;
+    stylePrompt: string;
+    coverUrl: string;
+    category: string;
+    status?: number;
+    sortOrder?: number;
+};
+
+export function createAdminGenerationStyle(input: Omit<ServerGenerationStyleInput, "id">) {
+    return serverPost("/admin/style/createStyle", input);
+}
+
+export function updateAdminGenerationStyle(input: ServerGenerationStyleInput & { id: number }) {
+    return serverPost("/admin/style/updateStyle", input);
+}
+
+export function updateAdminGenerationStyleStatus(id: number, status: number) {
+    return serverPost("/admin/style/updateStyleStatus", { id, status });
+}
+
+export function deleteAdminGenerationStyles(ids: number[]) {
+    return serverPost("/admin/style/deleteStyles", { ids });
+}
+
+export function listAdminNotifications() {
+    return serverGet<{ notifications: SystemNotification[] }>("/admin/notification/list");
+}
+
+export function createAdminNotification(input: { title: string; content?: string; priority?: string }) {
+    return serverPost("/admin/notification/create", input);
+}
+
+export function publishAdminNotification(id: number) {
+    return serverPost(`/admin/notification/publish?id=${id}`, {});
+}
+
+export function updateAdminNotification(input: { id: number; title: string; content?: string }) {
+    return serverPost("/admin/notification/update", input);
+}
+
+export function listMyNotifications() {
+    return serverGet<{ notifications: SystemNotification[] }>("/notification/list");
+}
+
+export function markNotificationRead(notificationId: number) {
+    return serverPost("/notification/read", { notificationId });
+}
+
+export function markAllNotificationsRead() {
+    return serverPost("/notification/markAllRead", {});
+}
+
+export async function listCanvasProjects<T>() {
+    const data = await serverGet<{ projects: T[] }>("/canvas/listProjects");
+    return data.projects || [];
+}
+
+export async function getCanvasProject<T>(id: string) {
+    const data = await serverPost<{ project: T }>("/canvas/getProject", { id });
+    return data.project;
+}
+
+export function saveCanvasProject(project: unknown) {
+    return serverPost("/canvas/saveProject", { project });
+}
+
+export function deleteCanvasProjects(ids: string[]) {
+    return serverPost("/canvas/deleteProjects", { ids });
+}
+
+export async function listAssets<T>() {
+    const data = await serverGet<{ assets: T[] }>("/assets/listAssets");
+    return data.assets || [];
+}
+
+export function saveAsset(asset: unknown) {
+    return serverPost("/assets/saveAsset", { asset });
+}
+
+export function deleteAsset(ids: string[]) {
+    return serverPost("/assets/deleteAsset", { ids });
+}
+
+export type ServerGenerationLogPage<T> = { logs: T[]; hasMore: boolean };
+
+/** 按页读取生成记录，服务端固定每页最多返回15条。 */
+export function listGenerationLogs<T>(logType: "image" | "video", page = 1) {
+    return serverGet<ServerGenerationLogPage<T>>(`/generationLogs/listGenerationLogs?logType=${encodeURIComponent(logType)}&page=${page}`);
+}
+
+export type ServerAgentSessionHistoryMessage = {
+    id: string;
+    role: "user" | "assistant";
+    text: string;
+};
+
+/** 按当前用户和团队读取历史对话正文。 */
+export function getAgentSessionHistory(sessionId: string) {
+    return serverGet<ServerAgentSessionHistoryMessage[]>(`/ai/agent/getSessionHistory?sessionId=${encodeURIComponent(sessionId)}`);
+}
+
+export function saveGenerationLog(logType: "image" | "video", log: unknown) {
+    return serverPost("/generationLogs/saveGenerationLog", { logType, log });
+}
+
+export function renameGenerationLogTitle(id: string, title: string) {
+    return serverPost("/generationLogs/renameGenerationLogTitle", { id, title });
+}
+
+export function deleteGenerationLogs(ids: string[]) {
+    return serverPost("/generationLogs/deleteGenerationLogs", { ids });
+}
+
+export function markGenerationLogViewed(id: string) {
+    return serverPost("/generationLogs/markGenerationLogViewed", { id });
+}
+
+export function registerRemoteMedia(input: ServerMediaInput) {
+    return serverPost<ServerMediaInfo>("/media/registerRemoteMedia", input);
+}
+
+export function getServerMediaInfo(storageKey: string) {
+    return serverPost<ServerMediaInfo>("/media/getMediaInfo", { storageKey });
+}
+
+/** 批量换取媒体临时读地址，避免画布和列表逐个请求。 */
+export function batchGetServerMediaAccess(storageKeys: string[]) {
+    return serverPost<{ items: ServerMediaAccessItem[] }>("/media/batchAccess", { storageKeys });
+}
+
+/** 批量换取任务列表缩略图地址。支持的对象存储会在读取时把长边缩到 160 像素。 */
+export function batchGetServerListThumbnailAccess(storageKeys: string[]) {
+    return serverPost<{ items: ServerMediaAccessItem[] }>("/media/batchListThumbnailAccess", { storageKeys });
+}
+
+/** 批量换取视频生成结果的封面地址。历史视频没有封面时地址为空。 */
+export function batchGetServerVideoCoverAccess(storageKeys: string[]) {
+    return serverPost<{ items: ServerMediaAccessItem[] }>("/media/batchVideoCoverAccess", { storageKeys });
+}
+
+export async function downloadServerMedia(storageKey: string) {
+    const response = await requestServer("/media/downloadMedia", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ storageKey }),
+    });
+    if (response.status === 404) {
+        return null;
+    }
+    if (!response.ok) {
+        const payload = (await response.json().catch(() => null)) as ApiResponse<never> | null;
+        throw new Error(payload?.msg || translate("common.downloadFailed", { value0: response.status }));
+    }
+    return response.blob();
+}
+
+/** 流式读取已完成的分镜导出视频。 */
+export async function downloadComicDramaExportVideo(taskId: string): Promise<Blob> {
+    const response = await requestServer("/comicDrama/downloadExportVideo", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ taskId }),
+    });
+    if (!response.ok) {
+        const payload = (await response.json().catch(() => null)) as ApiResponse<never> | null;
+        throw new Error(payload?.msg || `下载失败：${response.status}`);
+    }
+    return response.blob();
+}
+
+export function uploadRemoteMediaToObjectStorage(storageKey: string) {
+    return serverPost<ServerMediaInfo>("/media/uploadRemoteMediaToObjectStorage", { storageKey });
+}
+
+export function deleteServerMedia(storageKeys: string[]) {
+    return serverPost("/media/deleteMedia", { storageKeys });
+}
+
+export function uploadServerMedia(file: Blob, input: ServerMediaInput, fileName = "file") {
+    const formData = new FormData();
+    formData.set("file", file, fileName);
+    formData.set("kind", input.kind);
+    appendFormValue(formData, "storageKey", input.storageKey);
+    appendFormValue(formData, "mimeType", input.mimeType);
+    appendFormValue(formData, "width", input.width);
+    appendFormValue(formData, "height", input.height);
+    appendFormValue(formData, "durationMs", input.durationMs);
+    if (input.compress) formData.set("compress", "true");
+    if (input.metadata !== undefined) formData.set("metadata", JSON.stringify(input.metadata));
+    return serverFetch<ServerMediaInfo>("/media/uploadMedia", { method: "POST", body: formData });
+}
+
+export function createAiTask(input: ServerAiTaskCreateInput) {
+    return serverPost<ServerAiTask>("/ai/task/createTask", input);
+}
+
+export function quoteVideoWorkflow(input: { workflowType: string; model: string; imageModel: string; resolution: string; seconds: string; size?: string; stage?: "image" | "video" }) {
+    return serverPost<ServerVideoWorkflowQuote>("/ai/video/workflowQuote", input);
+}
+
+export function createPromptOptimizationTask(input: { generationType: PromptOptimizationType; prompt: string; generationStyleIds?: number[] }) {
+    return serverPost<ServerAiTask>("/ai/prompt/optimizePrompt", input);
+}
+
+export async function listAiTasks(statuses?: ServerAiTaskStatus[]) {
+    const query = statuses?.length ? `?status=${encodeURIComponent(statuses.join(","))}` : "";
+    const data = await serverGet<{ tasks: ServerAiTask[] }>(`/ai/task/listTasks${query}`);
+    return data.tasks || [];
+}
+
+export function getAiTaskInfo(taskId: string) {
+    return serverGet<ServerAiTask>(`/ai/task/getTaskInfo?taskId=${encodeURIComponent(taskId)}`);
+}
+
+let runtimeConfigPromise: Promise<ServerRuntimeConfig> | null = null;
+
+/**
+ * 读取服务端统一运行时配置。
+ *
+ * @return Promise<ServerRuntimeConfig> 服务端运行时配置
+ */
+export function getRuntimeConfig(): Promise<ServerRuntimeConfig> {
+    if (!runtimeConfigPromise) {
+        runtimeConfigPromise = serverGet<ServerRuntimeConfig>("/config/getRuntimeConfig", { auth: false }).catch((error) => {
+            runtimeConfigPromise = null;
+            throw error;
+        });
+    }
+    return runtimeConfigPromise;
+}
+
+/**
+ * 获取统一的AI异步任务状态轮询间隔毫秒数。
+ *
+ * @return Promise<number> 轮询间隔毫秒数
+ */
+export async function getAiTaskPollingIntervalMilliseconds(): Promise<number> {
+    const seconds = (await getRuntimeConfig()).aiTaskPollingIntervalSeconds;
+    if (!Number.isInteger(seconds) || seconds <= 0) {
+        throw new Error(translate("common.invalidAITaskPollingInterval"));
+    }
+    return seconds * 1000;
+}
+
+const generationCancelForfeitTaskIds = new Set<string>();
+
+/** 记录用户已确认放弃退款的任务，供等待中的中止路径沿用。 */
+export function markGenerationCancelForfeit(taskIds: string[]) {
+    taskIds.forEach((taskId) => generationCancelForfeitTaskIds.add(taskId));
+}
+
+export function cancelAiTask(taskId: string, options: { forfeitRefund?: boolean } = {}) {
+    return serverPost<ServerAiTask>("/ai/task/cancelTask", { taskId, forfeitRefund: options.forfeitRefund === true });
+}
+
+/** 生成请求已经发往供应商，普通取消会被服务端拒绝。 */
+export function isProviderRequestAlreadySentError(error: unknown) {
+    return error instanceof ServerApiError && error.messageKey === "business.providerRequestAlreadySentCannotCancel";
+}
+
+function cancelAiTaskForWait(taskId: string) {
+    const forfeitRefund = generationCancelForfeitTaskIds.has(taskId);
+    generationCancelForfeitTaskIds.delete(taskId);
+    return cancelAiTask(taskId, { forfeitRefund });
+}
+
+export function listServerAiModels() {
+    return serverGet<ServerAiModelList>("/ai/model/listModels");
+}
+
+export function listChannels() {
+    return serverGet<ServerChannelList>("/config/channel/listChannels");
+}
+
+export function listObjectStorages() {
+    return serverGet<ServerObjectStorageList>("/config/objectStorage/listObjectStorages");
+}
+
+export function listOAuthProviders() {
+    return serverGet<OAuthProviderListResponse>("/config/oauth/listOAuthProviders");
+}
+
+export function updateOAuthProvider(input: OAuthProviderUpdateInput) {
+    return serverPost<OAuthProviderInfo>("/config/oauth/updateOAuthProvider", input);
+}
+
+export function listStandardOAuthProviders() {
+    return serverGet<StandardOAuthProviderListResponse>("/config/oauth/listStandardOAuthProviders");
+}
+
+export function createStandardOAuthProvider(input: StandardOAuthProviderInput) {
+    return serverPost<StandardOAuthProviderInfo>("/config/oauth/createStandardOAuthProvider", input);
+}
+
+export function updateStandardOAuthProvider(input: StandardOAuthProviderInput) {
+    return serverPost<StandardOAuthProviderInfo>("/config/oauth/updateStandardOAuthProvider", input);
+}
+
+export function deleteStandardOAuthProvider(provider: string) {
+    return serverPost("/config/oauth/deleteStandardOAuthProvider", { provider });
+}
+
+export function listOAuthClients() {
+    return serverGet<OAuthClientListResponse>("/config/oauth/listOAuthClients");
+}
+
+export function createOAuthClient(input: OAuthClientCreateInput) {
+    return serverPost<OAuthClientInfo>("/config/oauth/createOAuthClient", input);
+}
+
+export function updateOAuthClient(input: OAuthClientUpdateInput) {
+    return serverPost<OAuthClientInfo>("/config/oauth/updateOAuthClient", input);
+}
+
+export function resetOAuthClientSecret(clientId: string) {
+    return serverPost<OAuthClientInfo>("/config/oauth/resetOAuthClientSecret", { clientId });
+}
+
+export function deleteOAuthClient(clientId: string) {
+    return serverPost("/config/oauth/deleteOAuthClient", { clientId });
+}
+
+export function getOAuthAuthorizationRequest(requestId: string) {
+    return serverGet<OAuthAuthorizationRequestView>(`/oauth/getAuthorizationRequest?requestId=${encodeURIComponent(requestId)}`, { auth: false, scope: "platform" });
+}
+
+export function approveOAuthAuthorization(requestId: string) {
+    return serverPost<OAuthAuthorizationDecision>("/oauth/approveAuthorization", { requestId }, { scope: "platform" });
+}
+
+export function denyOAuthAuthorization(requestId: string) {
+    return serverPost<OAuthAuthorizationDecision>("/oauth/denyAuthorization", { requestId }, { scope: "platform" });
+}
+
+export function createChannel(channel: ServerChannel) {
+    return serverPost<ServerChannel>("/config/channel/createChannel", channel);
+}
+
+export function updateChannel(channel: ServerChannel) {
+    return serverPost<ServerChannel>("/config/channel/updateChannel", channel);
+}
+
+export function refreshChannelModels(channel: Pick<ServerChannel, "baseUrl" | "apiKey" | "apiFormat">) {
+    return serverPost<ServerChannelModelList>("/config/channel/refreshChannelModels", {
+        baseUrl: channel.baseUrl,
+        apiKey: channel.apiKey,
+        apiFormat: channel.apiFormat,
+    });
+}
+
+export function deleteChannel(channelId: string) {
+    return serverPost("/config/channel/deleteChannel", { channelId });
+}
+
+export function listModelConfigs() {
+    return serverGet<{ modelConfigs: ServerModelConfig[] }>("/config/model/listModelConfigs");
+}
+
+export function createModelConfig(config: Omit<ServerModelConfig, "id" | "defaultModel">) {
+    return serverPost<ServerModelConfig>("/config/model/createModelConfig", config);
+}
+
+export function updateModelConfig(
+    config: Pick<
+        ServerModelConfig,
+        | "id"
+        | "modelType"
+        | "capabilities"
+        | "enabled"
+        | "sortOrder"
+        | "creditCost"
+        | "creditUnit"
+        | "thinkingEnabled"
+        | "reasoningEffort"
+        | "requestConcurrency"
+        | "convertImageSizeToPixels"
+        | "imageSizeMappings"
+        | "customBodyParameters"
+        | "videoBillingConfiguration"
+        | "imageBillingConfiguration"
+        | "displayName"
+        | "modelIcon"
+        | "isCustomModel"
+        | "customModelConfig"
+    >,
+) {
+    return serverPost<ServerModelConfig>("/config/model/updateModelConfig", config);
+}
+
+export function getCreditSettings() {
+    return serverGet<CreditSettings>("/config/credit/getCreditSettings");
+}
+
+export function updateCreditSettings(initialCredits: CreditAmount) {
+    return serverPost<CreditSettings>("/config/credit/updateCreditSettings", { initialCredits });
+}
+
+export function getTimeoutSettings() {
+    return serverGet<TimeoutSettings>("/config/timeout/getTimeoutSettings");
+}
+
+export function updateTimeoutSettings(settings: TimeoutSettings) {
+    return serverPost<TimeoutSettings>("/config/timeout/updateTimeoutSettings", settings);
+}
+
+export function getFirstPurchaseBonusSettings() {
+    return serverGet<FirstPurchaseBonusSettings>("/config/credit/getFirstPurchaseBonusSettings");
+}
+
+export function updateFirstPurchaseBonusSettings(percent: CreditAmount) {
+    return serverPost<FirstPurchaseBonusSettings>("/config/credit/updateFirstPurchaseBonusSettings", { percent });
+}
+
+export function getFirstPurchaseBonusStatus() {
+    return serverGet<FirstPurchaseBonusStatus>("/payment/credit/getFirstPurchaseBonusStatus", { scope: "platform" });
+}
+
+export function acknowledgeFirstPurchaseBonus() {
+    return serverPost<null>("/payment/credit/acknowledgeFirstPurchaseBonus", {}, { scope: "platform" });
+}
+
+export function listCreditProducts() {
+    return serverGet<ServerCreditProductList>("/payment/credit/listProducts", { scope: "platform" });
+}
+
+export function createCreditPurchaseOrder(input: { productId: number; paymentMethod: string }) {
+    return serverPost<ServerCreateCreditOrderResponse>("/payment/credit/createOrder", input, { scope: "platform" });
+}
+
+export function getCreditPurchaseOrderStatus(orderNo: string, signal?: AbortSignal) {
+    const query = new URLSearchParams({ orderNo });
+    return serverGet<ServerCreditOrderStatus>(`/payment/credit/getOrderStatus?${query}`, { scope: "platform", signal });
+}
+
+export function getCreditPurchasePayment(orderNo: string, signal?: AbortSignal) {
+    const query = new URLSearchParams({ orderNo });
+    return serverGet<ServerCreateCreditOrderResponse>(`/payment/credit/getOrderPayment?${query}`, { scope: "platform", signal });
+}
+
+export function listCreditOrders(limit = 30, signal?: AbortSignal) {
+    const query = new URLSearchParams({ limit: String(limit) });
+    return serverGet<ServerCreditOrderList>(`/payment/credit/listOrders?${query}`, { scope: "platform", signal });
+}
+
+export function cancelCreditOrder(orderNo: string) {
+    return serverPost<ServerCreditOrderStatus>("/payment/credit/cancelOrder", { orderNo }, { scope: "platform" });
+}
+
+export function listAdminCreditProducts() {
+    return serverGet<ServerCreditProduct[]>("/config/creditProduct/listCreditProducts", { scope: "platform" });
+}
+
+export function createAdminCreditProduct(input: { credits: CreditAmount; bonusCredits: CreditAmount; priceAmount: string; sortOrder: number; enabled: boolean }) {
+    return serverPost<ServerCreditProduct>("/config/creditProduct/createCreditProduct", input, { scope: "platform" });
+}
+
+export function updateAdminCreditProduct(input: { id: number; credits: CreditAmount; bonusCredits: CreditAmount; priceAmount: string; sortOrder: number; enabled: boolean }) {
+    return serverPost<ServerCreditProduct>("/config/creditProduct/updateCreditProduct", input, { scope: "platform" });
+}
+
+export function updateAdminCreditProductStatus(id: number, enabled: boolean) {
+    return serverPost<ServerCreditProduct>("/config/creditProduct/updateCreditProductStatus", { id, enabled }, { scope: "platform" });
+}
+
+export function getInvitationRewardSettings() {
+    return serverGet<InvitationRewardSettings>("/config/invitation/getInvitationRewardSettings");
+}
+
+export function updateInvitationRewardSettings(invitationRewardCredits: CreditAmount) {
+    return serverPost<InvitationRewardSettings>("/config/invitation/updateInvitationRewardSettings", { invitationRewardCredits });
+}
+
+export function getCheckInRewardSettings() {
+    return serverGet<ServerCheckInRewardSettings>("/config/checkIn/getCheckInRewardSettings");
+}
+
+export function updateCheckInRewardSettings(settings: ServerCheckInRewardSettings) {
+    return serverPost<ServerCheckInRewardSettings>("/config/checkIn/updateCheckInRewardSettings", settings);
+}
+
+export function getCheckInStatus(month?: string) {
+    const query = month ? `?${new URLSearchParams({ month })}` : "";
+    return serverGet<ServerCheckInStatus>(`/checkIn/getCheckInStatus${query}`);
+}
+
+export function submitCheckIn() {
+    return serverPost<ServerCheckInResult>("/checkIn/checkIn", {});
+}
+
+export function getCreditOverview(params: { startDate: string; endDate: string; generationType?: "image" | "video"; trendUnit: "day" | "month" }) {
+    const query = new URLSearchParams({ startDate: params.startDate, endDate: params.endDate, trendUnit: params.trendUnit });
+    if (params.generationType) query.set("generationType", params.generationType);
+    return serverGet<ServerCreditOverview>(`/credit/getCreditOverview?${query}`);
+}
+
+export function listCreditTransactions(params: { startDate: string; endDate: string; direction?: ServerCreditDirection; source?: ServerCreditSource; page: number; pageSize: number }) {
+    const query = new URLSearchParams({
+        startDate: params.startDate,
+        endDate: params.endDate,
+        page: String(params.page),
+        pageSize: String(params.pageSize),
+    });
+    if (params.direction) query.set("direction", params.direction);
+    if (params.source) query.set("source", params.source);
+    return serverGet<ServerUserCreditTransactionList>(`/credit/listCreditTransactions?${query}`);
+}
+
+export function listTaskRecords(params: { startDate: string; endDate: string; taskType?: "image" | "video"; keyword?: string; page: number; pageSize: number }) {
+    const query = new URLSearchParams({
+        startDate: params.startDate,
+        endDate: params.endDate,
+        page: String(params.page),
+        pageSize: String(params.pageSize),
+    });
+    if (params.taskType) query.set("taskType", params.taskType);
+    if (params.keyword) query.set("keyword", params.keyword);
+    return serverGet<ServerTaskRecordList>(`/credit/listTaskRecords?${query}`);
+}
+
+/** 查询管理员可见的全站图片与视频任务记录。 */
+export function listAdminTaskRecords(params: { startDate: string; endDate: string; taskType?: "image" | "video"; keyword?: string; page: number; pageSize: number }) {
+    const query = new URLSearchParams({
+        startDate: params.startDate,
+        endDate: params.endDate,
+        page: String(params.page),
+        pageSize: String(params.pageSize),
+    });
+    if (params.taskType) query.set("taskType", params.taskType);
+    if (params.keyword) query.set("keyword", params.keyword);
+    return serverGet<ServerAdminTaskRecordList>(`/admin/credit/listTaskRecords?${query}`);
+}
+
+export function redeemCredits(cardCode: string) {
+    return serverPost<ServerRedeemCreditsResponse>("/credit/redeemCredits", { cardCode });
+}
+
+export function listRedemptionRecords(params: { startDate?: string; endDate?: string; cardCode?: string; page: number; pageSize: number }) {
+    const query = new URLSearchParams({ page: String(params.page), pageSize: String(params.pageSize) });
+    if (params.startDate) query.set("startDate", params.startDate);
+    if (params.endDate) query.set("endDate", params.endDate);
+    if (params.cardCode?.trim()) query.set("cardCode", params.cardCode.trim());
+    return serverGet<ServerRedemptionRecordList>(`/credit/listRedemptionRecords?${query}`);
+}
+
+export function getAdminCreditOverview(params: { filterTeamId?: number; userId?: number; startDate: string; endDate: string; generationType?: "image" | "video"; trendUnit: "day" | "month" }) {
+    const query = new URLSearchParams({ startDate: params.startDate, endDate: params.endDate, trendUnit: params.trendUnit });
+    if (params.filterTeamId !== undefined) query.set("filterTeamId", String(params.filterTeamId));
+    if (params.userId !== undefined) query.set("userId", String(params.userId));
+    if (params.generationType) query.set("generationType", params.generationType);
+    return serverGet<ServerCreditOverview>(`/admin/credit/getCreditOverview?${query}`);
+}
+
+export function listAdminCreditTransactions(params: { filterTeamId?: number; userId?: number; startDate: string; endDate: string; direction?: ServerCreditDirection; source?: ServerCreditSource; keyword?: string; page: number; pageSize: number }) {
+    const query = new URLSearchParams({
+        startDate: params.startDate,
+        endDate: params.endDate,
+        page: String(params.page),
+        pageSize: String(params.pageSize),
+    });
+    if (params.filterTeamId !== undefined) query.set("filterTeamId", String(params.filterTeamId));
+    if (params.userId !== undefined) query.set("userId", String(params.userId));
+    if (params.direction) query.set("direction", params.direction);
+    if (params.source) query.set("source", params.source);
+    if (params.keyword) query.set("keyword", params.keyword);
+    return serverGet<ServerAdminCreditTransactionList>(`/admin/credit/listCreditTransactions?${query}`);
+}
+
+export function generateCreditCards(input: { quantity?: number; creditsPerCard: CreditAmount }) {
+    return serverPost<{ batchId: number; quantity: number; creditsPerCard: CreditAmount; cardCodes: string[]; createdAt: string }>("/admin/credit/generateCreditCards", input);
+}
+
+export function listCreditCardBatches(params: { page: number; pageSize: number }) {
+    const query = new URLSearchParams({ page: String(params.page), pageSize: String(params.pageSize) });
+    return serverGet<ServerCreditCardBatchList>(`/admin/credit/listCreditCardBatches?${query}`);
+}
+
+export function listCreditCards(params: { batchId?: number; status?: "available" | "redeemed"; cardCode?: string; redeemedUserKeyword?: string; includeCode?: boolean; page: number; pageSize: number }) {
+    const query = new URLSearchParams({ page: String(params.page), pageSize: String(params.pageSize), includeCode: String(params.includeCode === true) });
+    if (params.batchId !== undefined) query.set("batchId", String(params.batchId));
+    if (params.status) query.set("status", params.status);
+    if (params.cardCode?.trim()) query.set("cardCode", params.cardCode.trim());
+    if (params.redeemedUserKeyword?.trim()) query.set("redeemedUserKeyword", params.redeemedUserKeyword.trim());
+    return serverGet<ServerCreditCardList>(`/admin/credit/listCreditCards?${query}`);
+}
+
+export function deleteModelConfig(id: string) {
+    return serverPost("/config/model/deleteModelConfig", { id });
+}
+
+export function setDefaultModel(id: string, modelType: ServerModelConfig["modelType"]) {
+    return serverPost("/config/model/setDefaultModel", { id, modelType });
+}
+
+export function createObjectStorage(objectStorage: ObjectStorageConfig) {
+    return serverPost<ObjectStorageConfig>("/config/objectStorage/createObjectStorage", objectStorage);
+}
+
+export function updateObjectStorage(objectStorage: ObjectStorageConfig) {
+    return serverPost<ObjectStorageConfig>("/config/objectStorage/updateObjectStorage", objectStorage);
+}
+
+export function testObjectStorage(objectStorage: ObjectStorageConfig) {
+    return serverPost<ObjectStorageFile>("/config/objectStorage/testObjectStorage", objectStorage);
+}
+
+export function deleteObjectStorage(storageId: string) {
+    return serverPost("/config/objectStorage/deleteObjectStorage", { storageId });
+}
+
+export function setDefaultObjectStorage(storageId: string) {
+    return serverPost("/config/objectStorage/setDefaultObjectStorage", { storageId });
+}
+
+export async function waitAiTask(taskId: string, options: { signal?: AbortSignal; onProgress?: (task: ServerAiTask) => void } = {}) {
+    const creditPromptScope = useInsufficientCreditsStore.getState().scope;
+    if (options.signal?.aborted) {
+        void cancelAiTaskForWait(taskId).catch(() => {});
+        throw new DOMException("Aborted", "AbortError");
+    }
+    const initial = await getAiTaskInfo(taskId);
+    if (options.signal?.aborted) {
+        void cancelAiTaskForWait(taskId).catch(() => {});
+        throw new DOMException("Aborted", "AbortError");
+    }
+    if (isFinalAiTaskStatus(initial.status)) return completedAiTask(initial, creditPromptScope);
+    const pollingIntervalMilliseconds = await getAiTaskPollingIntervalMilliseconds();
+    return new Promise<ServerAiTask>((resolve, reject) => {
+        let settled = false;
+        const cleanupFns: Array<() => void> = [];
+        const finish = (callback: () => void) => {
+            if (settled) return;
+            settled = true;
+            cleanupFns.forEach((cleanup) => cleanup());
+            callback();
+        };
+        const onTask = (task: ServerAiTask) => {
+            if (task.id !== taskId) return;
+            if (!isFinalAiTaskStatus(task.status)) {
+                options.onProgress?.(task);
+                return;
+            }
+            finish(() => {
+                try {
+                    resolve(completedAiTask(task, creditPromptScope));
+                } catch (error) {
+                    reject(error);
+                }
+            });
+        };
+        cleanupFns.push(subscribeAiTaskEvents(onTask));
+        const pollTimer = window.setInterval(() => {
+            void getAiTaskInfo(taskId)
+                .then(onTask)
+                .catch((error) => finish(() => reject(error)));
+        }, pollingIntervalMilliseconds);
+        cleanupFns.push(() => window.clearInterval(pollTimer));
+        if (options.signal) {
+            const onAbort = () => {
+                void cancelAiTaskForWait(taskId).catch(() => {});
+                finish(() => reject(new DOMException("Aborted", "AbortError")));
+            };
+            if (options.signal.aborted) {
+                onAbort();
+            } else {
+                options.signal.addEventListener("abort", onAbort, { once: true });
+                cleanupFns.push(() => options.signal?.removeEventListener("abort", onAbort));
+            }
+        }
+    });
+}
+
+export function readAiTaskError(error: unknown): AiTaskErrorDetails {
+    if (error instanceof AiTaskFailureError) return error.details;
+    if (error instanceof DOMException && error.name === "AbortError") {
+        return { source: "canvas", category: "canceled", stage: "frontend_tool", message: translate("common.generationStopped"), requestAccepted: true, safeToRetry: false };
+    }
+    return {
+        messageKey: error instanceof ServerApiError ? (error.messageKey ?? undefined) : undefined,
+        source: "canvas",
+        category: "unknown",
+        stage: "frontend_tool",
+        message: error instanceof Error ? error.message : translate("common.generationFailed"),
+        requestAccepted: true,
+        safeToRetry: false,
+    };
+}
+
+function completedAiTask(task: ServerAiTask, creditPromptScope: string): ServerAiTask {
+    if (task.status === "success") return task;
+    notifyInsufficientCredits(task.systemMessage?.key, task.errorMessage, `task:${task.id}`, creditPromptScope);
+    const rawResult = task.resultData && typeof task.resultData === "object" ? (task.resultData as Record<string, unknown>) : undefined;
+    const rawError = rawResult?.error && typeof rawResult.error === "object" ? (rawResult.error as Record<string, unknown>) : undefined;
+    const message = task.errorMessage || readOptionalText(rawError?.message) || (task.status === "canceled" ? translate("common.taskCanceled") : translate("common.generationFailed"));
+    throw new AiTaskFailureError(message, {
+        messageKey: task.systemMessage?.key,
+        source: readOptionalText(rawError?.source) || "task",
+        category: readOptionalText(rawError?.category) || (task.status === "canceled" ? "canceled" : "unknown"),
+        stage: readOptionalText(rawError?.stage) || "execution",
+        httpStatus: typeof rawError?.httpStatus === "number" ? rawError.httpStatus : undefined,
+        code: readOptionalText(rawError?.code),
+        type: readOptionalText(rawError?.type),
+        parameter: readOptionalText(rawError?.parameter),
+        message,
+        requestAccepted: rawError?.requestAccepted === true ? true : rawError?.requestAccepted === false ? false : null,
+        safeToRetry: rawError?.safeToRetry === true,
+    });
+}
+
+function readOptionalText(value: unknown): string | undefined {
+    return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+type ServerRequestOptions = { auth?: boolean; signal?: AbortSignal; scope?: "platform" };
+
+export async function serverGet<T>(path: string, options?: ServerRequestOptions) {
+    return serverFetch<T>(path, { method: "GET", signal: options?.signal }, options);
+}
+
+export async function serverPost<T = string>(path: string, body: unknown, options?: ServerRequestOptions & { allowEmpty?: boolean }) {
+    return serverFetch<T>(
+        path,
+        {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+        },
+        options,
+    );
+}
+
+export function serverUpload<T = string>(path: string, formData: FormData) {
+    return serverFetch<T>(path, { method: "POST", body: formData });
+}
+
+async function serverFetch<T>(path: string, init: RequestInit, options: ServerRequestOptions & { allowEmpty?: boolean } = {}) {
+    const creditPromptScope = useInsufficientCreditsStore.getState().scope;
+    const response = await requestServer(path, init, options);
+    const payload = (await response.json().catch(() => null)) as ApiResponse<T> | null;
+    // 允许空响应体的查询接口（例如“项目最近一次任务”没有任务时）返回 undefined，而不是抛错。
+    if (!payload && options.allowEmpty && response.ok) return undefined as T;
+    if (!response.ok || (payload && payload.code !== 0)) {
+        notifyInsufficientCredits(response.headers.get("X-System-Message-Key"), payload?.msg, undefined, creditPromptScope);
+    }
+    if (!response.ok || !payload) {
+        throw new ServerApiError(payload?.msg || translate("common.serverRequestFailed", { value0: response.status }), response.status, payload?.code ?? -1, response.headers.get("X-System-Message-Key"));
+    }
+    if (payload.code !== 0) {
+        throw new ServerApiError(payload.msg || translate("common.serverRequestFailed_5ed90b"), response.status, payload.code, response.headers.get("X-System-Message-Key"));
+    }
+    if (init.method === "POST" && /^\/(media|script\/source|storage|sharedWork)\//.test(path)) notifyStorageCapacityChanged();
+    return payload.data;
+}
+
+async function requestServer(path: string, init: RequestInit, options: ServerRequestOptions = {}) {
+    const headers = new Headers(init.headers);
+    headers.set("Accept-Language", currentLanguageTag());
+    const teamId = useTeamStore.getState().team?.id;
+    if (teamId && options.scope !== "platform") headers.set("X-Team-Id", String(teamId));
+    if (options.auth !== false) {
+        const token = getAuthToken();
+        if (token) headers.set("Authorization", `Bearer ${token}`);
+    }
+    const response = await fetch(`${serverBaseUrl()}${path}`, {
+        ...init,
+        headers,
+        cache: "no-store",
+        credentials: "include",
+    });
+    if (response.status === 401 && options.auth !== false && !init.signal?.aborted) {
+        const store = useUserStore.getState();
+        // 旧请求的失败不能退出后来登录的新账号；会话失效由空间边界统一导航。
+        if (headers.get("Authorization") === `Bearer ${store.token}` && store.token) store.clearSession();
+        else if (!headers.has("Authorization") && !store.token) store.openAuthModal();
+    }
+    return response;
+}
+
+export function serverBaseUrl() {
+    const configured = process.env.NEXT_PUBLIC_SERVER_URL?.trim().replace(/\/+$/, "");
+    if (configured) return withServerApiPrefix(configured);
+    if (typeof window !== "undefined") return withServerApiPrefix(window.location.origin);
+    return withServerApiPrefix(defaultServerUrl);
+}
+
+type AiTaskListener = (task: ServerAiTask) => void;
+type AiTaskDeltaListener = (taskId: string, delta: string) => void;
+type CreditBalanceListener = (creditBalance: CreditAmount) => void;
+
+const aiTaskListeners = new Set<AiTaskListener>();
+const aiTaskDeltaListeners = new Set<AiTaskDeltaListener>();
+const creditBalanceListeners = new Set<CreditBalanceListener>();
+let aiTaskEventSource: EventSource | null = null;
+let aiTaskReconnectTimer: number | null = null;
+
+export function subscribeAiTaskEvents(listener: AiTaskListener) {
+    aiTaskListeners.add(listener);
+    ensureAiTaskEventSource();
+    return () => {
+        aiTaskListeners.delete(listener);
+        if (!hasAiTaskEventListeners()) closeAiTaskEventSource();
+    };
+}
+
+export function subscribeAiTaskDeltas(listener: AiTaskDeltaListener) {
+    aiTaskDeltaListeners.add(listener);
+    ensureAiTaskEventSource();
+    return () => {
+        aiTaskDeltaListeners.delete(listener);
+        if (!hasAiTaskEventListeners()) closeAiTaskEventSource();
+    };
+}
+
+export function subscribeCreditBalanceEvents(listener: CreditBalanceListener) {
+    creditBalanceListeners.add(listener);
+    ensureAiTaskEventSource();
+    return () => {
+        creditBalanceListeners.delete(listener);
+        if (!hasAiTaskEventListeners()) closeAiTaskEventSource();
+    };
+}
+
+function ensureAiTaskEventSource() {
+    if (aiTaskEventSource || typeof window === "undefined") return;
+    const token = getAuthToken();
+    if (!token) return;
+    const source = new EventSource(`${serverBaseUrl()}/ai/task/subscribe?token=${encodeURIComponent(token)}&locale=${currentWebsiteLocale()}&teamId=${useTeamStore.getState().team?.id || 0}`);
+    const creditPromptScope = useInsufficientCreditsStore.getState().scope;
+    aiTaskEventSource = source;
+    source.addEventListener("wallet-change", () => {
+        void import("./team")
+            .then((module) => module.getWalletBalances())
+            .then((wallets) => useTeamStore.getState().setWallets(wallets))
+            .catch((error) => console.error("刷新积分钱包失败", error));
+    });
+    source.addEventListener("task", (event) => {
+        const payload = parseAiTaskEventData((event as MessageEvent).data);
+        if (!payload.task) return;
+        if (payload.task.status === "failed") notifyInsufficientCredits(payload.task.systemMessage?.key, payload.task.errorMessage, `task:${payload.task.id}`, creditPromptScope);
+        aiTaskListeners.forEach((listener) => listener(payload.task as ServerAiTask));
+    });
+    source.addEventListener("text-delta", (event) => {
+        const payload = parseAiTaskEventData((event as MessageEvent).data);
+        if (!payload.task || typeof payload.delta !== "string") return;
+        aiTaskDeltaListeners.forEach((listener) => listener(payload.task!.id, payload.delta as string));
+    });
+    source.addEventListener("credit-balance", (event) => {
+        const payload = parseAiTaskEventData((event as MessageEvent).data);
+        const creditBalance = payload.creditBalance;
+        if (creditBalance === undefined || !creditAmount(creditBalance).isFinite() || creditAmount(creditBalance).isNegative()) return;
+        creditBalanceListeners.forEach((listener) => listener(creditBalance));
+    });
+    source.onerror = () => {
+        closeAiTaskEventSource();
+        if (!hasAiTaskEventListeners()) return;
+        aiTaskReconnectTimer = window.setTimeout(() => {
+            aiTaskReconnectTimer = null;
+            ensureAiTaskEventSource();
+        }, 2000);
+    };
+}
+
+function closeAiTaskEventSource() {
+    if (aiTaskReconnectTimer) {
+        window.clearTimeout(aiTaskReconnectTimer);
+        aiTaskReconnectTimer = null;
+    }
+    aiTaskEventSource?.close();
+    aiTaskEventSource = null;
+}
+
+function hasAiTaskEventListeners() {
+    return Boolean(aiTaskListeners.size || aiTaskDeltaListeners.size || creditBalanceListeners.size);
+}
+
+function isFinalAiTaskStatus(status: ServerAiTaskStatus) {
+    return status === "success" || status === "failed" || status === "canceled";
+}
+
+function parseAiTaskEventData(data: string): { task?: ServerAiTask; delta?: string; creditBalance?: CreditAmount } {
+    const payload = JSON.parse(data) as { task?: ServerAiTask; delta?: string; creditBalance?: CreditAmount } | string;
+    return typeof payload === "string" ? (JSON.parse(payload) as { task?: ServerAiTask; delta?: string; creditBalance?: CreditAmount }) : payload;
+}
+
+function withServerApiPrefix(baseUrl: string) {
+    return baseUrl.endsWith(serverApiPrefix) ? baseUrl : `${baseUrl}${serverApiPrefix}`;
+}
+
+function appendFormValue(formData: FormData, key: string, value: string | number | undefined) {
+    if (value === undefined || value === "") return;
+    formData.set(key, String(value));
+}
+
+function promptQuery(params: ServerPromptListParams) {
+    const query = new URLSearchParams();
+    if (params.keyword) query.set("keyword", params.keyword);
+    params.tag?.forEach((tag) => query.append("tag", tag));
+    if (params.category) query.set("category", params.category);
+    if (params.status !== undefined) query.set("status", String(params.status));
+    if (params.page) query.set("page", String(params.page));
+    if (params.pageSize) query.set("pageSize", String(params.pageSize));
+    return query.size ? `?${query}` : "";
+}
+
+// 语言变化仅重建订阅，运行中的任务继续由现有轮询对账。
+useLanguageStore.subscribe((state, previous) => {
+    if (state.locale === previous.locale) return;
+    closeAiTaskEventSource();
+    if (hasAiTaskEventListeners()) ensureAiTaskEventSource();
+});
