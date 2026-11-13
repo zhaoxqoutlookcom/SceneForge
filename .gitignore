@@ -36,3 +36,4 @@ logs/
 *.log
 *.tmp
 .cache/
+.maven-repository/
